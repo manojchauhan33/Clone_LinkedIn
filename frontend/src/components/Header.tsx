@@ -6,10 +6,10 @@ import { AiFillMessage } from "react-icons/ai";
 import { IoMdNotifications } from "react-icons/io";
 import { Link } from "react-router-dom";
 import ProfileMenu from "./Dialog/ProfileMenu";
-import { useAuth } from "../context/AuthContext";
+// import { useAuth } from "../context/AuthContext";
 
 const Header: React.FC = () => {
-  const { user } = useAuth();
+  // const { user } = useAuth();
   return (
     <header className="bg-white border-b shadow-sm h-14 sm:h-16 flex items-center justify-between px-4 sm:px-6 md:px-10 sticky top-0 z-50">
       <div className="flex items-center space-x-4">
@@ -40,7 +40,8 @@ const Header: React.FC = () => {
           />
         </div>
       </div>
-      {/* Center: Navigation */}
+      
+      
       <nav className="flex space-x-6 md:space-x-10 text-gray-600">
         <Link
           to="/home"
@@ -78,9 +79,8 @@ const Header: React.FC = () => {
           <span className="text-xs hidden md:block">Notifications</span>
         </Link>
       </nav>
-      \
       <div className="flex items-center space-x-6">
-        <ProfileMenu profilePic={user?.profilePic || null} />
+        <ProfileMenu/>
 
         <div className="flex flex-col items-center justify-center cursor-pointer hover:text-blue-600 mt-2">
           <FaTh size={22} />

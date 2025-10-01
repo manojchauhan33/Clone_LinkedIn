@@ -14,7 +14,7 @@ export const authenticate = async (
   next: NextFunction
 ) => {
   try {
-    const token = req.cookies?.token;
+    const token = req.cookies?.token || req.headers["authorization"]?.split(" ")[1];
 
     if (!token) {
       return res.status(401).json({ error: "Unauthorized. Token missing." });
@@ -26,7 +26,10 @@ export const authenticate = async (
     if (!user) {
       return res.status(401).json({ error: "Unauthorized. User not found." });
     }
-    req.user = user;
+
+    req.user = user;       // full user object
+    (req as any).userId = user.id;  //  add this for controllers
+
     next();
   } catch (err: any) {
     return res.status(401).json({ error: "Unauthorized. Invalid token." });

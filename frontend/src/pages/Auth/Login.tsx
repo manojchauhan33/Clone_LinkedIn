@@ -2,11 +2,13 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { GoogleLogin } from "@react-oauth/google";
 import { useForm } from "react-hook-form";
+import { ErrorMessage } from "@hookform/error-message";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { login as apiLogin, googleLogin as apiGoogleLogin } from "../../api/auth";
 import { loginSchema } from "./validations";
 import type { LoginFormData } from "./validations";
 import { useAuth } from "../../context/AuthContext";
+import type { ApiError, GoogleCredential } from "../../types/errors";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -22,23 +24,28 @@ const Login = () => {
     resolver: zodResolver(loginSchema),
   });
 
-  
+  // Handle form submit
   const onSubmit = async (data: LoginFormData) => {
     try {
-      const res = await apiLogin(data); 
-      setUser(res.user);               
-      navigate("/home");              
-    } catch (err: any) {
-      setServerMessage(err.response?.data?.error || "Login failed");
+      const res = await apiLogin(data);
+      setUser(res.user!);
+      navigate("/home");
+    } catch (err: unknown) {
+      const axiosErr = err as ApiError;
+      setServerMessage(axiosErr.response?.data?.error || "Login failed");
     }
   };
 
   // Google login
-  const handleGoogleLoginSuccess = async (credentialResponse: any) => {
+  const handleGoogleLoginSuccess = async (credentialResponse: GoogleCredential) => {
     try {
+      if (!credentialResponse.credential) {
+        setServerMessage("Google login failed");
+        return;
+      }
       const res = await apiGoogleLogin(credentialResponse.credential);
-      setUser(res.user);              
-      navigate("/home");             
+      setUser(res.user!);
+      navigate("/home");
     } catch {
       setServerMessage("Google login failed");
     }
@@ -48,7 +55,7 @@ const Login = () => {
     <div className="min-h-screen flex items-center justify-center px-4 bg-gray-50">
       <div>
         <svg
-          className="absolute top-1 left-1"
+          className="absolute top-10 left-9"
           width="120"
           height="30"
           viewBox="0 0 102 26"
@@ -64,21 +71,44 @@ const Login = () => {
         </svg>
       </div>
       <div className="max-w-md w-full bg-white p-8 rounded-lg shadow-lg">
-        <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">Login</h2>
+        <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">
+          Login
+        </h2>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <input
-            type="email"
-            placeholder="Email"
-            {...register("email")}
-            className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            {...register("password")}
-            className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          {/* Email */}
+          <div>
+            <input
+              type="email"
+              placeholder="Email"
+              {...register("email")}
+              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <ErrorMessage
+              errors={errors}
+              name="email"
+              render={({ message }) => (
+                <p className="text-red-500 text-sm mt-1">{message}</p>
+              )}
+            />
+          </div>
+
+          {/* Password */}
+          <div>
+            <input
+              type="password"
+              placeholder="Password"
+              {...register("password")}
+              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <ErrorMessage
+              errors={errors}
+              name="password"
+              render={({ message }) => (
+                <p className="text-red-500 text-sm mt-1">{message}</p>
+              )}
+            />
+          </div>
 
           <button
             type="submit"
@@ -88,26 +118,21 @@ const Login = () => {
             {isSubmitting ? "Logging in..." : "Login"}
           </button>
 
-          {(Object.values(errors).length > 0 || serverMessage) && (
-            <div className="text-center mt-2 space-y-1">
-              {Object.values(errors).map((err: any, i) => (
-                <p key={i} className="text-red-500 text-sm">{err?.message}</p>
-              ))}
-              {serverMessage && (
-                <p
-                  className={`text-sm ${
-                    serverMessage.toLowerCase().includes("success")
-                      ? "text-green-500"
-                      : "text-red-500"
-                  }`}
-                >
-                  {serverMessage}
-                </p>
-              )}
-            </div>
+          {/* Server response */}
+          {serverMessage && (
+            <p
+              className={`text-center text-sm mt-2 ${
+                serverMessage.toLowerCase().includes("success")
+                  ? "text-green-500"
+                  : "text-red-500"
+              }`}
+            >
+              {serverMessage}
+            </p>
           )}
         </form>
 
+        {/* Forgot Password */}
         <div className="flex mt-4 text-sm text-gray-600">
           <span
             className="ml-auto text-blue-600 cursor-pointer hover:underline"
@@ -117,12 +142,14 @@ const Login = () => {
           </span>
         </div>
 
+        {/* Divider */}
         <div className="flex items-center my-4">
           <hr className="flex-grow border-gray-300" />
           <span className="px-2 text-gray-400 text-sm">OR</span>
           <hr className="flex-grow border-gray-300" />
         </div>
 
+        {/* Google Login */}
         <div className="flex justify-center">
           <GoogleLogin
             onSuccess={handleGoogleLoginSuccess}
@@ -130,6 +157,7 @@ const Login = () => {
           />
         </div>
 
+        {/* Redirect to Signup */}
         <p className="text-sm text-center mt-6 text-gray-600">
           First time in LinkedIn?{" "}
           <span

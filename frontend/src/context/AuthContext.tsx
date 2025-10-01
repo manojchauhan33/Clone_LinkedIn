@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { checkAuth, logout as logoutApi } from "../api/auth";
-import type { User } from "../api/auth";
+import type { User } from "../types/errors";
 
 interface AuthContextType {
   user: User | null;
@@ -31,7 +31,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const fetchUser = async () => {
     try {
       const data = await checkAuth();
-      setUser(data.user || null);
+      setUser(data.user!);
     } catch {
       setUser(null);
     } finally {
@@ -70,3 +70,5 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 };
 
 export const useAuth = () => useContext(AuthContext);
+
+

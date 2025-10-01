@@ -1,7 +1,10 @@
 {
   "compilerOptions": {
-    "target": "ES6",
-    "module": "commonjs",
+    "target": "ESNext",                        // modern JS target
+    "module": "ESNext",                        // allow import.meta
+    "lib": ["ESNext", "DOM"],                  // browser + modern features
+    "moduleResolution": "Node",                // resolve node_modules properly
+    "jsx": "react-jsx",                        // React 17+ JSX transform
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -9,6 +12,11 @@
     "baseUrl": "./",
     "paths": {}
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.d.ts",
+    "src/vite-env.d.ts"                        
+  ],
   "exclude": ["node_modules", "dist"]
 }
