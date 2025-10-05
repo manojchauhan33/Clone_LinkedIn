@@ -5,7 +5,7 @@ import { FaShoppingBag, FaSearch, FaTh } from "react-icons/fa";
 import { AiFillMessage } from "react-icons/ai";
 import { IoMdNotifications } from "react-icons/io";
 import { Link } from "react-router-dom";
-import ProfileMenu from "./Dialog/ProfileMenu";
+import ProfileMenu from "./ProfileMenu";
 // import { useAuth } from "../context/AuthContext";
 
 const Header: React.FC = () => {

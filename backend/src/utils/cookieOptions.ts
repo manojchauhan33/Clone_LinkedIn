@@ -1,4 +1,4 @@
 export const COOKIE_OPTIONS = {
-  httpOnly: true, //  not accessible by JS
+  httpOnly: true,
   maxAge: 60 * 60 * 1000,
 };

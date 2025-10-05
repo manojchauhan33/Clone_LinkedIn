@@ -51,6 +51,6 @@ export const logout = async (): Promise<{ message: string }> => {
 };
 
 export const checkAuth = async (): Promise<AuthResponse> => {
-  const res = await api.get<AuthResponse>("/auth/me");
+  const res = await api.get<AuthResponse>("/me");
   return res.data;
 };

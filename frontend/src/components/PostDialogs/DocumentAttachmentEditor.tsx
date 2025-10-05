@@ -4,7 +4,7 @@ interface DocumentAttachmentEditorProps {
   files: File[];
   onClose: () => void;
   onUpdate: (files: File[]) => void;
-  onAddMore?: () => void; // optional
+  onAddMore?: () => void;
 }
 
 const DocumentAttachmentEditor = ({

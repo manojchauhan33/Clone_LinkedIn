@@ -6,7 +6,7 @@ import Typography from "@mui/material/Typography";
 import Divider from "@mui/material/Divider";
 import { FaUserCircle, FaCog, FaQuestionCircle, FaLanguage, FaSignOutAlt } from "react-icons/fa";
 import { MdAccountBox } from "react-icons/md";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../context/AuthContext";
 
 interface ProfileMenuProps {
   profilePic?: string | null;

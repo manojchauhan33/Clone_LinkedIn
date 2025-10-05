@@ -22,8 +22,7 @@ const MediaAttachmentEditor = ({
     if (currentFileIndex >= files.length && files.length > 0) {
       setCurrentFileIndex(files.length - 1);
     }
-    if (files.length === 0) onClose();
-  }, [files, currentFileIndex, onClose]);
+  }, [files, currentFileIndex]);
 
   const previewUrl = useMemo(
     () => (currentFile ? URL.createObjectURL(currentFile) : null),
@@ -38,13 +37,25 @@ const MediaAttachmentEditor = ({
     onUpdate(updatedFiles);
   };
 
+  if (files.length === 0) {
+    return (
+      <div className="flex items-center justify-center w-full h-screen">
+        <button
+          onClick={onAddMore}
+          className="flex items-center gap-2 px-8 py-4 bg-[#0A66C2] text-white font-semibold rounded-full hover:bg-[#004182] transition"
+        >
+          <FaPlus size={20} />
+          <span>Upload Media</span>
+        </button>
+      </div>
+    );
+  }
+
   if (!currentFile || !previewUrl) return null;
 
   return (
     <div className="flex flex-col h-full w-full">
-      {/* Main Content */}
       <div className="flex flex-1 overflow-hidden p-4 gap-4">
-        {/* Preview Area */}
         <div className="flex-1 bg-black rounded-lg flex items-center justify-center relative min-h-[280px] max-h-[60vh]">
           {isImage ? (
             <img
@@ -61,7 +72,6 @@ const MediaAttachmentEditor = ({
           ) : null}
         </div>
 
-        
         <div className="w-36 flex flex-col gap-3 overflow-y-auto">
           {files.map((file, index) => {
             const thumbUrl = URL.createObjectURL(file);
@@ -95,18 +105,16 @@ const MediaAttachmentEditor = ({
             );
           })}
 
-          {/* Add More */}
           <button
             onClick={onAddMore}
+            aria-label="add more"
             className="w-36 h-36 border-2 border-dashed border-gray-400 rounded-lg flex items-center justify-center text-gray-500 hover:border-[#0A66C2] hover:text-[#0A66C2] transition"
-            title="Add More Media"
           >
             <FaPlus size={28} />
           </button>
         </div>
       </div>
 
-      {/* Footer */}
       <div className="flex justify-end gap-3 p-4 border-t border-gray-400 rounded-b-lg">
         <button
           onClick={onClose}

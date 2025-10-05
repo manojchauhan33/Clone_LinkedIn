@@ -16,12 +16,13 @@ interface PostAttributes {
   commentCount: number;
   repostCount: number;
   lastActivityAt: Date;
+  postType: "public" | "connection-only";
 }
 
 export interface PostCreationAttributes extends Optional<PostAttributes,
   "id" | "content" | "media" | "hashtags" | "isRepost" |
   "originalPostId" | "repostComment" | "likeCount" | "celebrateCount" |
-  "commentCount" | "repostCount" | "lastActivityAt"
+  "commentCount" | "repostCount" | "lastActivityAt" | "postType"
 > {}
 
 export class Post extends Model<PostAttributes, PostCreationAttributes> implements PostAttributes {
@@ -38,6 +39,7 @@ export class Post extends Model<PostAttributes, PostCreationAttributes> implemen
   public commentCount!: number;
   public repostCount!: number;
   public lastActivityAt!: Date;
+  public postType!: "public" | "connection-only";
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -52,7 +54,10 @@ Post.init(
     userId: { 
       type: DataTypes.INTEGER, 
       allowNull: false, 
-      references: { model: User, key: "id" } 
+      references: { 
+        model: User, 
+        key: "id" 
+      } 
     },
     content: { 
       type: DataTypes.TEXT("long"), 
@@ -94,7 +99,7 @@ Post.init(
       allowNull: false 
     },
     repostCount: { 
-      type: DataTypes.INTEGER, 
+      type: DataTypes.INTEGER,
       defaultValue: 0, 
       allowNull: false 
     },
@@ -103,16 +108,29 @@ Post.init(
       allowNull: false, 
       defaultValue: DataTypes.NOW 
     },
+    postType: { 
+      type: DataTypes.ENUM("public", "connection-only"), 
+      allowNull: false, 
+      defaultValue: "public" 
+    },
   },
   {
     sequelize,
     tableName: "posts",
-    timestamps: true,
+    indexes: [
+      { fields: ["userId"] },                    // search posts by user
+      { fields: ["createdAt"] },                 // latest posts first
+      { fields: ["hashtags"] },                  // search by hashtags
+      { fields: ["postType"] },                  // search by type
+      { fields: ["originalPostId"] },            // find reposts
+    ],
   }
 );
 
+
 Post.belongsTo(User, { foreignKey: "userId", as: "author" });
 User.hasMany(Post, { foreignKey: "userId", as: "posts" });
+
 Post.belongsTo(Post, { foreignKey: "originalPostId", as: "originalPost" });
 Post.hasMany(Post, { foreignKey: "originalPostId", as: "reposts" });
 

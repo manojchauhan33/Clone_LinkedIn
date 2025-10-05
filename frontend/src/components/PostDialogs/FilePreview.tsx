@@ -56,7 +56,7 @@ const FilePreview = ({ file }: FilePreviewProps) => {
           <iframe
             src={previewUrl}
             title={file.name}
-            className="w-full h-[600px]" // set custom height to 600px
+            className="w-full h-[600px]"
           />
         </div>
       )}

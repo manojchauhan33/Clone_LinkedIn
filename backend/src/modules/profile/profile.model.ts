@@ -16,18 +16,20 @@ class Profile extends Model<Attributes, ProfileCreationAttributes> implements At
   public name!: string;
 }
 
-Profile.init({
-  id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
-  userId: { type: DataTypes.INTEGER, allowNull: false },
-  name: { type: DataTypes.STRING, allowNull: false },
-}, {
-  sequelize,
-  tableName: "profiles"
-});
+Profile.init(
+  {
+    id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    userId: { type: DataTypes.INTEGER, allowNull: false },
+    name: { type: DataTypes.STRING, allowNull: false },
+  },
+  {
+    sequelize,
+    tableName: "profiles",
+  }
+);
 
 
-User.hasOne(Profile, { foreignKey: "userId", onDelete: "CASCADE" });
-Profile.belongsTo(User, { foreignKey: "userId" });
+User.hasOne(Profile, { as: "profile", foreignKey: "userId", onDelete: "CASCADE" });
+Profile.belongsTo(User, { as: "user", foreignKey: "userId" });
 
 export default Profile;
-
