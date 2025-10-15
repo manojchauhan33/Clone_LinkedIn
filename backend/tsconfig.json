@@ -1,24 +1,60 @@
+// {
+//   "compilerOptions": {
+//     /* File Layout */
+//     "rootDir": "backend/src",            // source code yaha hoga
+//     "outDir": "./dist",            // compiled js yaha jayega
+
+//     /* Environment */
+//     "module": "commonjs",          // Node.js ke liye
+//     "target": "ES2020",
+//     "lib": ["esnext"],
+//     "types": ["node"],             // Node.js types
+//     "esModuleInterop": true,       // import/export support
+//     "resolveJsonModule": true,     // agar json import karna ho to
+
+//     /* Output */
+//     "sourceMap": true,             // debugger ke liye
+//     "declaration": true,           // .d.ts files generate karega
+//     "declarationMap": true,
+
+//     /* Strictness */
+//     "strict": true,               
+//     "noUncheckedIndexedAccess": true,
+//     "exactOptionalPropertyTypes": true,
+//     "forceConsistentCasingInFileNames": true,
+//     "skipLibCheck": true,
+
+//     /* Module Handling */
+//     "moduleResolution": "node",
+//     "isolatedModules": true,
+//     "verbatimModuleSyntax": false
+//   },
+//   "include": ["backend/src"],             
+//   "exclude": ["backend/node_modules", "dist", "tests"]
+// }
+
+
 {
   "compilerOptions": {
     /* File Layout */
-    "rootDir": "backend/src",            // source code yaha hoga
-    "outDir": "./dist",            // compiled js yaha jayega
+    "rootDir": "backend/src",
+    "outDir": "./dist",
 
     /* Environment */
-    "module": "commonjs",          // Node.js ke liye
+    "module": "commonjs",
     "target": "ES2020",
     "lib": ["esnext"],
-    "types": ["node"],             // Node.js types
-    "esModuleInterop": true,       // import/export support
-    "resolveJsonModule": true,     // agar json import karna ho to
+    "types": ["node"], 
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
 
     /* Output */
-    "sourceMap": true,             // debugger ke liye
-    "declaration": true,           // .d.ts files generate karega
+    "sourceMap": true,
+    "declaration": true,
     "declarationMap": true,
 
     /* Strictness */
-    "strict": true,               
+    "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "forceConsistentCasingInFileNames": true,
@@ -27,8 +63,12 @@
     /* Module Handling */
     "moduleResolution": "node",
     "isolatedModules": true,
-    "verbatimModuleSyntax": false
+    "verbatimModuleSyntax": false,
+
+    /* 👇 ADD THIS: tells TS where your custom global types live */
+    // "typeRoots": ["./backend/src/types", "./node_modules/@types"]
+    "typeRoots": ["./backend/src/types", "./node_modules/@types"]
   },
-  "include": ["backend/src"],             
+  "include": ["backend/src"],
   "exclude": ["backend/node_modules", "dist", "tests"]
 }

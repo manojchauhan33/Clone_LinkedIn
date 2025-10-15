@@ -1,29 +1,15 @@
-//linkedin colone in react typescript sql node express typescript 
+Counters consistency
 
-first module now ended 
-signup - name store in profile module because in future user can chane his name thats why 
-login
-login with google
-verify gmail
-forgotpassword
-all authentication 
+Hamesha transaction me update karo, jaise humne toggleLike, addComment, repostPost me kiya.
 
-Generics <> use karke hum types ko variables ki tarah pass kar dete hain, jisse function, class, ya interface alag-alag data types ke saath kaam karne ke liye flexible ho jaata hai, aur saath hi type-safe bhi rehta hai.
+Agar direct DB update karoge without transaction, kabhi counts mismatch ho sakte hain.
 
-id: 1
-userId: 100 (you)
-content: "I love football!"
-isRepost: false
-originalPostId: null
-repostComment: null
-repostCount: 0
+Edge cases
 
+Delete comment / unlike / delete repost → counters decrement karna mat bhoolna.
 
+Optional validation
 
-id: 2
-userId: 101 (the person reposting)
-content: "I love football!"  ← copied from original
-isRepost: true
-originalPostId: 1  ← points to your original post
-repostComment: "This is so true!"
-repostCount: 0  ← for this repost itself
+Kabhi-kabhi counters Post aur actual PostComment/PostLike rows mismatch ho sakte hain.
+
+Periodically cron job ya migration script se counters sync kar sakte ho.

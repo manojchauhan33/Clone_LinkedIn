@@ -2,7 +2,7 @@ import pino from "pino";
 
 const logger = pino({
   transport: {
-    target: "pino-pretty", // development colorful logs
+    target: "pino-pretty",
     options: { colorize: true }
   }
 });

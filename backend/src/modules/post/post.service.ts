@@ -5,6 +5,7 @@ import PostRepost from "./post.postRepost";
 import { PostComment } from "./post.postComment";
 import User from "../auth/user.model";
 import Profile from "../profile/profile.model";
+import { withTransaction } from "../../utils/transaction";
 
 type AllowedMediaType = "image" | "video" | "document";
 
@@ -62,23 +63,62 @@ export const PostService = {
 };
 
 // FETCH POSTS
-export const getPostsService = async (userId: number) => {
+// export const getPostsService = async (userId: number) => {
+//   try {
+//     const posts = await Post.findAll({
+//       where: { isRepost: false },
+//       order: [["createdAt", "DESC"]],
+//       include: [
+//         {
+//           model: User,
+//           as: "author",
+//           attributes: ["id", "email"],
+//           include: [
+//             {
+//               model: Profile,
+//               as: "profile",
+//               attributes: ["name"],
+//             },
+//           ],
+//         },
+//         { model: Post, as: "originalPost" },
+//         { model: Post, as: "reposts" },
+//       ],
+//     });
+
+//     const likedPosts = await PostLike.findAll({ where: { userId } });
+//     const repostedPosts = await PostRepost.findAll({ where: { userId } });
+
+//     const likedPostIds = new Set(likedPosts.map((like) => like.postId));
+//     const repostedPostIds = new Set(repostedPosts.map((r) => r.postId));
+
+//     const enrichedPosts = posts.map((post: any) => ({
+//       ...post.toJSON(),
+//       likedByCurrentUser: likedPostIds.has(post.id),
+//       repostedByCurrentUser: repostedPostIds.has(post.id),
+//     }));
+
+//     return enrichedPosts;
+//   } catch (error) {
+//     throw new Error("Failed to fetch posts");
+//   }
+// };
+
+export const getPostsService = async (userId: number, page = 1, limit = 5) => {
+  const offset = (page - 1) * limit;
+
   try {
     const posts = await Post.findAll({
       where: { isRepost: false },
       order: [["createdAt", "DESC"]],
+      limit,
+      offset,
       include: [
         {
           model: User,
           as: "author",
           attributes: ["id", "email"],
-          include: [
-            {
-              model: Profile,
-              as: "profile",
-              attributes: ["name"],
-            },
-          ],
+          include: [{ model: Profile, as: "profile", attributes: ["name"] }],
         },
         { model: Post, as: "originalPost" },
         { model: Post, as: "reposts" },
@@ -106,95 +146,374 @@ export const getPostsService = async (userId: number) => {
 // LIKE SERVICE
 export const PostLikeService = {
   toggleLike: async (postId: number, userId: number) => {
-    const post = await Post.findByPk(postId);
-    if (!post) throw new Error("Post not found");
+    return withTransaction(async (t) => {
+      const post = await Post.findByPk(postId, { transaction: t });
+      if (!post) throw new Error("Post not found");
 
-    const existingLike = await PostLike.findOne({ where: { postId, userId } });
+      const existingLike = await PostLike.findOne({
+        where: { postId, userId },
+        transaction: t,
+      });
 
-    if (existingLike) {
-      await existingLike.destroy();
-      post.likeCount = Math.max(0, post.likeCount - 1);
-      await post.save();
-      return { liked: false, likeCount: post.likeCount };
-    }
+      if (existingLike) {
+        await existingLike.destroy({ transaction: t });
+        post.likeCount = Math.max(0, post.likeCount - 1);
+      } else {
+        await PostLike.create({ postId, userId }, { transaction: t });
+        post.likeCount += 1;
+      }
 
-    await PostLike.create({ postId, userId });
-    post.likeCount += 1;
-    await post.save();
-    return { liked: true, likeCount: post.likeCount };
+      await post.save({ transaction: t });
+
+      return { liked: !existingLike, likeCount: post.likeCount };
+    });
   },
 };
 
 // COMMENT SERVICE
 export const PostCommentService = {
   addComment: async (postId: number, userId: number, content: string) => {
-    const post = await Post.findByPk(postId);
-    if (!post) throw new Error("Post not found");
+    return withTransaction(async (t) => {
+      const post = await Post.findByPk(postId, { transaction: t });
+      if (!post) throw new Error("Post not found");
 
-    const comment = await PostComment.create({ postId, userId, content });
-    post.commentCount += 1;
-    await post.save();
+      const comment = await PostComment.create(
+        { postId, userId, content },
+        { transaction: t }
+      );
 
-    return {
-      commentId: comment.id,
-      postId,
-      userId,
-      content: comment.content,
-      createdAt: comment.createdAt,
-    };
+      post.commentCount += 1;
+      await post.save({ transaction: t });
+
+      return {
+        commentId: comment.id,
+        postId,
+        userId,
+        content: comment.content,
+        createdAt: comment.createdAt,
+      };
+    });
   },
 };
 
-// Repost logic
+//REPOST
 export const PostRepostService = {
   repostPost: async (
     postId: number,
     userId: number,
     repostComment?: string
   ) => {
-    const originalPost = await Post.findByPk(postId);
-    if (!originalPost) throw new Error("Post not found");
+    return withTransaction(async (t) => {
+      try {
+        const originalPost = await Post.findByPk(postId, { transaction: t });
+        if (!originalPost) throw new Error("Post not found");
 
-    if (!repostComment) {
-      const alreadyReposted = await Post.findOne({
-        where: {
-          userId,
-          originalPostId: postId,
-          isRepost: true,
-          repostComment: null,
-        },
-      });
-      if (alreadyReposted) throw new Error("You already reposted this post");
-    }
+        const trimmedComment = repostComment?.trim() || null;
 
-    // Create a repost post
-    const repost = await Post.create({
-      userId,
-      content: originalPost.content,
-      media: originalPost.media,
-      hashtags: originalPost.hashtags,
-      isRepost: true,
-      originalPostId: originalPost.id,
-      repostComment: repostComment || null,
-      postType: originalPost.postType,
-      lastActivityAt: new Date(),
+        if (!trimmedComment) {
+          const existingPlainRepost = await Post.findOne({
+            where: {
+              userId,
+              originalPostId: postId,
+              isRepost: true,
+              repostComment: null,
+            },
+            transaction: t,
+          });
+
+          if (existingPlainRepost) {
+            throw new Error("You already reposted this post");
+          }
+
+          const newRepost = await Post.create(
+            {
+              userId,
+              content: originalPost.content,
+              media: originalPost.media,
+              hashtags: originalPost.hashtags || "",
+              isRepost: true,
+              originalPostId: originalPost.id,
+              repostComment: null,
+              postType: originalPost.postType,
+              lastActivityAt: new Date(),
+            },
+            { transaction: t }
+          );
+
+          await PostRepost.create(
+            {
+              postId: originalPost.id,
+              userId,
+              content: null,
+            },
+            { transaction: t }
+          );
+
+          originalPost.repostCount += 1;
+          originalPost.lastActivityAt = new Date();
+          await originalPost.save({ transaction: t });
+
+          return {
+            type: "simple",
+            reposted: true,
+            repostCount: originalPost.repostCount,
+            repostId: newRepost.id,
+            originalPostId: originalPost.id,
+          };
+        }
+
+        const existingThoughtRepost = await Post.findOne({
+          where: {
+            userId,
+            originalPostId: postId,
+            isRepost: true,
+            repostComment: trimmedComment,
+          },
+          transaction: t,
+        });
+
+        if (existingThoughtRepost) {
+          throw new Error(
+            "You already reposted this post with the same thought"
+          );
+        }
+
+        const newRepostWithComment = await Post.create(
+          {
+            userId,
+            // content: trimmedComment,
+            content: originalPost.content,
+            media: originalPost.media,
+            hashtags: originalPost.hashtags || "",
+            isRepost: true,
+            originalPostId: originalPost.id,
+            repostComment: trimmedComment,
+            postType: originalPost.postType,
+            lastActivityAt: new Date(),
+          },
+          { transaction: t }
+        );
+
+        await PostRepost.create(
+          {
+            postId: originalPost.id,
+            userId,
+            content: trimmedComment,
+          },
+          { transaction: t }
+        );
+
+        originalPost.repostCount += 1;
+        originalPost.lastActivityAt = new Date();
+        await originalPost.save({ transaction: t });
+
+        return {
+          type: "with_thought",
+          reposted: true,
+          repostCount: originalPost.repostCount,
+          repostId: newRepostWithComment.id,
+          originalPostId: originalPost.id,
+          repostComment: newRepostWithComment.repostComment,
+        };
+      } catch (err) {
+        // console.error("Error", err);
+        throw err;
+      }
     });
-
-    // Store in PostRepost table
-    await PostRepost.create({
-      postId: originalPost.id,
-      userId,
-      content: repostComment || null,
-    });
-
-    // Update original post repost count
-    originalPost.repostCount += 1;
-    await originalPost.save();
-
-    return {
-      reposted: true,
-      repostCount: originalPost.repostCount,
-      repostId: repost.id,
-    };
   },
+};
+
+// LIKE
+interface LikeWithUser {
+  likeId: number;
+  user: { id: number; email: string; name?: string | null };
+  createdAt: Date;
+}
+
+export const getPostLikesService = async (
+  postId: number
+): Promise<LikeWithUser[]> => {
+  const post = await Post.findByPk(postId);
+  if (!post)
+    throw Object.assign(new Error("Post not found"), { statusCode: 404 });
+
+  const likes = await PostLike.findAll({
+    where: { postId },
+    include: [
+      {
+        model: User,
+        as: "user",
+        attributes: ["id", "email"],
+        include: [{ model: Profile, as: "profile", attributes: ["name"] }],
+      },
+    ],
+    order: [["createdAt", "DESC"]],
+  });
+
+  return likes.map((like: any) => ({
+    likeId: like.id,
+    user: {
+      id: like.user?.id ?? null,
+      email: like.user?.email ?? null,
+      name: like.user?.profile?.name ?? null,
+    },
+    createdAt: like.createdAt,
+  }));
+};
+
+// COMMENT
+interface CommentWithUser {
+  commentId: number;
+  content: string;
+  user: { id: number; email: string; name?: string | null };
+  createdAt: Date;
+}
+
+export const getPostCommentsService = async (
+  postId: number
+): Promise<CommentWithUser[]> => {
+  const post = await Post.findByPk(postId);
+  if (!post)
+    throw Object.assign(new Error("Post not found"), { statusCode: 404 });
+
+  const comments = await PostComment.findAll({
+    where: { postId },
+    include: [
+      {
+        model: User,
+        as: "user",
+        attributes: ["id", "email"],
+        include: [{ model: Profile, as: "profile", attributes: ["name"] }],
+      },
+    ],
+    order: [["createdAt", "DESC"]],
+  });
+
+  return comments.map((comment: any) => ({
+    commentId: comment.id,
+    content: comment.content,
+    user: {
+      id: comment.user?.id ?? null,
+      email: comment.user?.email ?? null,
+      name: comment.user?.profile?.name ?? null,
+    },
+    createdAt: comment.createdAt,
+  }));
+};
+
+// REPOST
+// interface RepostWithUser {
+//   repostId: number;
+//   content: string | null;
+//   media: any[];
+//   hashtags: string | null;
+//   repostComment: string | null;
+//   user: { id: number; email: string; name?: string | null };
+//   createdAt: Date;
+// }
+
+// export const getPostRepostsService = async (
+//   postId: number
+// ): Promise<RepostWithUser[]> => {
+//   const post = await Post.findByPk(postId);
+//   if (!post)
+//     throw Object.assign(new Error("Post not found"), { statusCode: 404 });
+
+//   const reposts = await PostRepost.findAll({
+//     where: { postId },
+//     include: [
+//       {
+//         model: Post,
+//         as: "repostPost", // include actual repost post
+//         include: [
+//           {
+//             model: User,
+//             as: "author",
+//             attributes: ["id", "email"],
+//             include: [{ model: Profile, as: "profile", attributes: ["name"] }],
+//           },
+//         ],
+//       },
+//     ],
+//     order: [["createdAt", "DESC"]],
+//   });
+
+//   return reposts
+//     .map((r: any) => r.repostPost)
+//     .filter(Boolean)
+//     .map((p: any) => ({
+//       repostId: p.id,
+//       content: p.content,
+//       media: p.media,
+//       hashtags: p.hashtags,
+//       repostComment: p.repostComment,
+//       user: {
+//         id: p.author?.id ?? null,
+//         email: p.author?.email ?? null,
+//         name: p.author?.profile?.name ?? null,
+//       },
+//       createdAt: p.createdAt,
+//     }));
+// };
+
+
+interface RepostWithUser {
+  repostId: number;
+  content: string | null;
+  media: any[];
+  hashtags: string | null;
+  repostComment: string | null;
+  user: { id: number | null; email: string | null; name: string | null };
+  createdAt: Date;
+}
+
+export const getPostRepostsService = async (
+  postId: number
+): Promise<RepostWithUser[]> => {
+  const post = await Post.findByPk(postId);
+  if (!post)
+    throw Object.assign(new Error("Post not found"), { statusCode: 404 });
+
+  const reposts = await PostRepost.findAll({
+    where: { postId },
+    include: [
+      {
+        model: Post,
+        as: "repostPost",
+        include: [
+          {
+            model: User,
+            as: "author",
+            attributes: ["id", "email"],
+            include: [
+              { model: Profile, as: "profile", attributes: ["name"] }
+            ],
+          },
+        ],
+      },
+      {
+        model: User,
+        as: "user",
+        attributes: ["id", "email"],
+        include: [
+          { model: Profile, as: "profile", attributes: ["name"] }
+        ],
+      },
+    ],
+    order: [["createdAt", "DESC"]],
+  });
+
+  return reposts.map((r: any) => ({
+    repostId: r.id,
+    content: r.repostPost?.content ?? null,
+    media: r.repostPost?.media ?? [],
+    hashtags: r.repostPost?.hashtags ?? null,
+    repostComment: r.repostPost?.repostComment ?? r.content ?? null,
+    user: {
+      id: r.user?.id ?? r.repostPost?.author?.id ?? null,
+      email: r.user?.email ?? r.repostPost?.author?.email ?? null,
+      name: r.user?.profile?.name ?? r.repostPost?.author?.profile?.name ?? null,
+    },
+    createdAt: r.createdAt,
+  }));
 };

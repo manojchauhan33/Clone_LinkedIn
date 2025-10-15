@@ -5,8 +5,4 @@ declare namespace NodeJS {
     CLOUDINARY_API_SECRET: string;
   }
 }
-declare var process: {
-  env: NodeJS.ProcessEnv;
-};
-
 

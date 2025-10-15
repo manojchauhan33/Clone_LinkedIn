@@ -78,6 +78,7 @@ export interface Post {
   originalPost?: Post | null;
   likedByCurrentUser?: boolean;
   repostedByCurrentUser?: boolean;
+  comments?: Comment[];
 }
 
 export interface FetchPostsResponse {
@@ -85,9 +86,14 @@ export interface FetchPostsResponse {
   posts: Post[];
 }
 
-export const fetchAllPosts = async (): Promise<Post[]> => {
+export const fetchAllPosts = async (
+  page: number = 1,
+  limit: number = 5
+): Promise<Post[]> => {
   try {
-    const res = await api.get<FetchPostsResponse>("/posts");
+    const res = await api.get<FetchPostsResponse>(
+      `/posts?page=${page}&limit=${limit}`
+    );
     return res.data.posts;
   } catch (error) {
     if (error instanceof AxiosError && error.response) {
@@ -173,6 +179,92 @@ export const repostPost = async (
       throw (
         (error.response.data as APIErrorResponse) || {
           message: "Failed to repost",
+        }
+      );
+    }
+    throw error;
+  }
+};
+
+export interface PostLikeUser {
+  id: number;
+  email: string;
+  profile: {
+    name: string;
+  };
+}
+
+export const getPostLikes = async (postId: number): Promise<PostLikeUser[]> => {
+  try {
+    const res = await api.get<{ likes: PostLikeUser[] }>(
+      `/posts/${postId}/likes`
+    );
+    return res.data.likes || res.data;
+  } catch (error) {
+    if (error instanceof AxiosError && error.response) {
+      throw (
+        (error.response.data as APIErrorResponse) || {
+          message: "Failed to fetch post likes",
+        }
+      );
+    }
+    throw error;
+  }
+};
+
+export interface PostCommentUser {
+  id: number;
+  email: string;
+  profile: {
+    name: string;
+  };
+  content: string;
+  createdAt: string;
+}
+
+export const getPostComments = async (
+  postId: number
+): Promise<PostCommentUser[]> => {
+  try {
+    const res = await api.get<{ comments: PostCommentUser[] }>(
+      `/posts/${postId}/comments`
+    );
+    return res.data.comments || res.data;
+  } catch (error) {
+    if (error instanceof AxiosError && error.response) {
+      throw (
+        (error.response.data as APIErrorResponse) || {
+          message: "Failed to fetch post comments",
+        }
+      );
+    }
+    throw error;
+  }
+};
+
+export interface PostRepostUser {
+  id: number;
+  email: string;
+  profile: {
+    name: string;
+  };
+  repostComment?: string | null;
+  createdAt: string;
+}
+
+export const getPostReposts = async (
+  postId: number
+): Promise<PostRepostUser[]> => {
+  try {
+    const res = await api.get<{ reposts: PostRepostUser[] }>(
+      `/posts/${postId}/reposts`
+    );
+    return res.data.reposts || res.data;
+  } catch (error) {
+    if (error instanceof AxiosError && error.response) {
+      throw (
+        (error.response.data as APIErrorResponse) || {
+          message: "Failed to fetch post reposts",
         }
       );
     }

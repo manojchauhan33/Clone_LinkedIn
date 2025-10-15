@@ -5,14 +5,18 @@ export const createPostSchema = z.object({
   hashtags: z.string().trim().optional().nullable(),
   isRepost: z.boolean().optional().default(false),
   originalPostId: z.number().int().positive().optional().nullable(),
-  repostComment: z
-    .string()
-    .trim()
-    .max(1000)
-    .optional()
-    .nullable()
-    .transform(val => (val === '' ? null : val)),
+  // repostComment: z
+  //   .string()
+  //   .trim()
+  //   .max(1000)
+  //   .optional()
+  //   .nullable()
+  //   .transform(val => (val === '' ? null : val)), // Allows empty or null comments
+  
+
+  repostComment: z.string().trim().max(1000).optional().nullable(),
   postType: z.enum(["public", "connection-only"]).optional(),
+  mediaAlts: z.array(z.string()).optional(),
 });
 
 export type CreatePostInput = z.infer<typeof createPostSchema>;

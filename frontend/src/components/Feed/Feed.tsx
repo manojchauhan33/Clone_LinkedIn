@@ -5,6 +5,8 @@ import {
   likePost,
   repostPost,
   commentPost,
+  // getPostLikes,
+  getPostComments,
 } from "../../api/Post";
 
 import {
@@ -14,8 +16,14 @@ import {
 } from "react-icons/ai";
 import { MdAccountCircle } from "react-icons/md";
 import { FaRegFileAlt } from "react-icons/fa";
+import { IoIosSend } from "react-icons/io";
 import { BiCommentDetail } from "react-icons/bi";
 import RepostModal from "./RepostModal";
+import MediaLightbox from "./MediaLightbox";
+import { useAuth } from "../../context/AuthContext";
+import EmojiPicker from "emoji-picker-react";
+import { BsEmojiSmile } from "react-icons/bs";
+import ReactionsBox from "./ReactionsBox";
 
 interface RepostingPost {
   post: PostType;
@@ -27,27 +35,103 @@ interface MediaItem {
   url: string;
 }
 
+interface PostCommentUser {
+  commentId?: number;
+  id?: number;
+  content: string;
+  createdAt: string;
+  user?: {
+    id: number;
+    email: string;
+    name: string;
+  };
+}
+
 const Feed: React.FC = () => {
+  const { user } = useAuth();
   const [posts, setPosts] = useState<PostType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const [activeCommentPost, setActiveCommentPost] = useState<number | null>(
-    null
-  );
-  const [commentTextMap, setCommentTextMap] = useState<Record<number, string>>(
-    {}
-  );
+  const [activeCommentPost, setActiveCommentPost] = useState<number | null>(null);
+  const [commentTextMap, setCommentTextMap] = useState<Record<number, string>>({});
+  const [commentsMap, setCommentsMap] = useState<Record<number, PostCommentUser[]>>({});
   const [reposting, setReposting] = useState<RepostingPost | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<PostType | null>(null);
-
   const [likedPosts, setLikedPosts] = useState<Set<number>>(new Set());
   const [repostedPosts, setRepostedPosts] = useState<Set<number>>(new Set());
+  const [repostPending, setRepostPending] = useState<Set<number>>(new Set());
+  const [lightbox, setLightbox] = useState<{media: MediaItem[];index: number;} | null>(null);
+  const [showEmojiPickerFor, setShowEmojiPickerFor] = useState<number | null>(null );
+  const [activeLikesBox, setActiveLikesBox] = useState<number | null>(null);
+
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const limit = 5;
+
+  const lastPostRef = useCallback(
+    (node: HTMLDivElement) => {
+      if (loading || !hasMore) return;
+
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries[0].isIntersecting) {
+            setPage((prev) => prev + 1);
+          }
+        },
+        {
+          root: null, // viewport
+          rootMargin: "0px",
+          threshold: 0.1,
+        }
+      );
+
+      if (node) {
+        observer.observe(node);
+      }
+
+      return () => {
+        if (node) {
+          observer.unobserve(node);
+        }
+      };
+    },
+    [loading, hasMore]
+  );
+
+  // Fetch posts
+  // useEffect(() => {
+  //   const loadPosts = async () => {
+  //     try {
+  //       const fetchedPosts = await fetchAllPosts();
+  //       const likedSet = new Set<number>();
+  //       const repostedSet = new Set<number>();
+  //       fetchedPosts.forEach((post) => {
+  //         if (post.likedByCurrentUser) likedSet.add(post.id);
+  //         if (post.repostedByCurrentUser) repostedSet.add(post.id);
+  //       });
+  //       setPosts(fetchedPosts);
+  //       setLikedPosts(likedSet);
+  //       setRepostedPosts(repostedSet);
+  //     } catch (err: unknown) {
+  //       if (err instanceof Error) setError(err.message);
+  //       else setError("Failed to fetch posts");
+  //     } finally {
+  //       setLoading(false);
+  //     }
+  //   };
+  //   loadPosts();
+  // }, []);
 
   useEffect(() => {
     const loadPosts = async () => {
+      if (page > 1 || posts.length === 0) {
+        setLoading(true);
+      }
+
       try {
-        const fetchedPosts = await fetchAllPosts();
+        const fetchedPosts = await fetchAllPosts(page, limit);
+
+        if (fetchedPosts.length < limit) setHasMore(false);
 
         const likedSet = new Set<number>();
         const repostedSet = new Set<number>();
@@ -56,9 +140,14 @@ const Feed: React.FC = () => {
           if (post.repostedByCurrentUser) repostedSet.add(post.id);
         });
 
-        setPosts(fetchedPosts);
-        setLikedPosts(likedSet);
-        setRepostedPosts(repostedSet);
+        setPosts((prev) => [...prev, ...fetchedPosts]);
+
+        setLikedPosts(
+          (prev) => new Set([...Array.from(prev), ...Array.from(likedSet)])
+        );
+        setRepostedPosts(
+          (prev) => new Set([...Array.from(prev), ...Array.from(repostedSet)])
+        );
       } catch (err: unknown) {
         if (err instanceof Error) setError(err.message);
         else setError("Failed to fetch posts");
@@ -67,9 +156,8 @@ const Feed: React.FC = () => {
       }
     };
     loadPosts();
-  }, []);
+  }, [page]);
 
-  //Helper
   const timeSince = useCallback((dateString: string): string => {
     const seconds = Math.floor(
       (new Date().getTime() - new Date(dateString).getTime()) / 1000
@@ -89,8 +177,9 @@ const Feed: React.FC = () => {
     return "0s";
   }, []);
 
-  /*Handlers*/
+  // Like
   const handleLike = async (postId: number) => {
+    if (!user) return;
     try {
       const data = await likePost(postId);
       setPosts((prev) =>
@@ -100,7 +189,12 @@ const Feed: React.FC = () => {
       );
       setLikedPosts((prev) => {
         const newSet = new Set(prev);
-        data.liked ? newSet.add(postId) : newSet.delete(postId);
+        if (data.liked) {
+          newSet.add(postId);
+        } else {
+          newSet.delete(postId);
+        }
+
         return newSet;
       });
     } catch (err) {
@@ -108,23 +202,27 @@ const Feed: React.FC = () => {
     }
   };
 
-  const handleRepost = async (postId: number) => {
+  // Repost
+  const handleRepost = async (postId: number, comment?: string) => {
+    if (!user || repostPending.has(postId)) return;
+    setRepostPending((prev) => new Set(prev).add(postId));
     try {
-      const data = await repostPost(postId);
+      const data = await repostPost(postId, comment);
       setPosts((prev) =>
         prev.map((p) =>
           p.id === postId ? { ...p, repostCount: data.repostCount } : p
         )
       );
-      setRepostedPosts((prev) => {
-        const newSet = new Set(prev);
-        if (data.reposted) newSet.add(postId);
-        else newSet.delete(postId);
-        return newSet;
-      });
+      if (data.reposted) setRepostedPosts((prev) => new Set(prev).add(postId));
       setReposting(null);
     } catch (err) {
       console.error(err);
+    } finally {
+      setRepostPending((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(postId);
+        return newSet;
+      });
     }
   };
 
@@ -132,43 +230,39 @@ const Feed: React.FC = () => {
     postToRepost: PostType,
     thought: string
   ) => {
-    try {
-      const data = await repostPost(postToRepost.id, thought.trim());
-
-      setPosts((prev) =>
-        prev.map((p) =>
-          p.id === postToRepost.id ? { ...p, repostCount: data.repostCount } : p
-        )
-      );
-      setRepostedPosts((prev) => new Set(prev).add(postToRepost.id));
-
-      // add new repost-with-thought post to feed
-      const newRepost: PostType = {
-        id: Date.now(),
-        content: thought,
-        media: null,
-        likeCount: 0,
-        commentCount: 0,
-        repostCount: 0,
-        createdAt: new Date().toISOString(),
-        author: { ...postToRepost.author },
-        originalPost: postToRepost,
-        likedByCurrentUser: false,
-        repostedByCurrentUser: true,
-      };
-      setPosts((prev) => [newRepost, ...prev]);
-
-      setIsModalOpen(null);
-    } catch (err: any) {
-      console.error("Repost error:", err);
-
-      // only show alert if it's not just a validation warning
-      // if (err.message && err.message !== "Validation error") {
-      //   alert("Failed to repost with thought.");
-      // }
-    }
+    await handleRepost(postToRepost.id, thought?.trim() || "");
+    setIsModalOpen(null);
   };
 
+  // const handleCommentSubmit = async (postId: number) => {
+  //   const text = commentTextMap[postId]?.trim();
+  //   if (!text) return;
+
+  //   // Optimistic update
+  //   setPosts((prev) =>
+  //     prev.map((p) =>
+  //       p.id === postId ? { ...p, commentCount: p.commentCount + 1 } : p
+  //     )
+  //   );
+  //   setCommentTextMap((prev) => ({ ...prev, [postId]: "" }));
+
+  //   try {
+  //     const newComment = await commentPost(postId, text);
+  //     setCommentsMap((prev) => ({
+  //       ...prev,
+  //       [postId]: [newComment.comment, ...(prev[postId] || [])],
+  //     }));
+  //   } catch (err) {
+  //     console.error(err);
+  //     setPosts((prev) =>
+  //       prev.map((p) =>
+  //         p.id === postId ? { ...p, commentCount: p.commentCount - 1 } : p
+  //       )
+  //     );
+  //   }
+  // };
+
+  // Comments
   const handleCommentChange = (postId: number, text: string) => {
     setCommentTextMap((prev) => ({ ...prev, [postId]: text }));
   };
@@ -176,40 +270,80 @@ const Feed: React.FC = () => {
   const handleCommentSubmit = async (postId: number) => {
     const text = commentTextMap[postId]?.trim();
     if (!text) return;
+
+    setCommentTextMap((prev) => ({ ...prev, [postId]: "" }));
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === postId ? { ...p, commentCount: p.commentCount + 1 } : p
+      )
+    );
+
     try {
-      const data = await commentPost(postId, text);
-      setPosts((prev) =>
-        prev.map((p) =>
-          p.id === postId ? { ...p, commentCount: data.commentCount } : p
-        )
-      );
-      setCommentTextMap((prev) => ({ ...prev, [postId]: "" }));
-      setActiveCommentPost(null);
+      // Send comment to backend
+      const newComment = await commentPost(postId, text);
+
+      const safeComment = {
+        ...newComment.comment,
+        user: newComment.comment.user || { name: "Unknown", id: 0, email: "" },
+      };
+
+      setCommentsMap((prev) => ({
+        ...prev,
+        [postId]: [safeComment, ...(prev[postId] || [])],
+      }));
     } catch (err) {
       console.error(err);
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId ? { ...p, commentCount: p.commentCount - 1 } : p
+        )
+      );
     }
   };
 
-  if (loading) return <p className="text-center p-8">Loading feed...</p>;
+  const handleShowComments = async (postId: number) => {
+    if (activeCommentPost === postId) {
+      setActiveCommentPost(null);
+      return;
+    }
+    setActiveCommentPost(postId);
+
+    if (!commentsMap[postId]) {
+      try {
+        const comments = await getPostComments(postId);
+        setCommentsMap((prev) => ({ ...prev, [postId]: comments }));
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  };
+
+  if (posts.length === 0 && loading)
+    return <p className="text-center p-8">Loading feed...</p>;
   if (error) return <p className="text-center p-8 text-red-500">{error}</p>;
-  if (posts.length === 0)
+  if (posts.length === 0 && !loading)
     return <p className="text-center p-8 text-gray-500">No posts available.</p>;
 
   return (
     <>
-      <div className="max-w-[42rem] mx-auto space-y-1 px-1 sm:px-0">
-        {posts.map((post) => {
+      <div className="max-w-[42rem] mx-auto space-y-4 px-1 sm:px-0">
+        {posts.map((post, index) => {
           const authorName = post.author?.profile?.name || "Unknown";
           const postDate = post.createdAt ? timeSince(post.createdAt) : "";
           const media = post.media || [];
           const isDropdownOpen =
             reposting?.post.id === post.id && reposting.openDropdown;
 
+          // Determine if this is the last post to apply the ref
+          const isLastPost = index === posts.length - 1;
+
           return (
             <div
               key={post.id}
-              className="bg-white border border-gray-200 rounded-lg shadow-sm p-2"
+              ref={isLastPost ? lastPostRef : null}
+              className="bg-white border border-gray-200 rounded-lg shadow-sm p-4"
             >
+              {/* Author */}
               <div className="flex items-start gap-3 mb-3">
                 <MdAccountCircle className="w-10 h-10 text-gray-500 rounded-full flex-shrink-0" />
                 <div>
@@ -218,6 +352,7 @@ const Feed: React.FC = () => {
                 </div>
               </div>
 
+              {/* Content */}
               {post.content && (
                 <div className="text-gray-800 whitespace-pre-wrap break-words leading-relaxed mb-4 text-base">
                   {post.content}
@@ -225,22 +360,47 @@ const Feed: React.FC = () => {
               )}
 
               {/* Media */}
-              {media.length > 0 && <PostMediaGrid media={media} />}
+              {media.length > 0 && (
+                <PostMediaGrid
+                  media={media}
+                  onClick={(index) => setLightbox({ media, index })}
+                />
+              )}
 
-              <div className="flex justify-between items-center text-sm text-gray-600 border-t border-gray-100 pt-3 mt-3">
-                <span>
+              {/* Stats */}
+              <div className="flex justify-between items-center text-sm text-gray-600 border-t border-gray-100 pt-3 mt-3 relative">
+                <span
+                  className="cursor-pointer hover:text-blue-600 relative"
+                  onClick={() =>
+                    setActiveLikesBox(
+                      activeLikesBox === post.id ? null : post.id
+                    )
+                  }
+                >
                   <span className="font-semibold">{post.likeCount}</span> Likes
+                  {activeLikesBox === post.id && (
+                    <ReactionsBox
+                      postId={post.id}
+                      onClose={() => setActiveLikesBox(null)}
+                    />
+                  )}
                 </span>
-                <span>
+
+                <span
+                  className="cursor-pointer hover:text-blue-600"
+                  onClick={() => handleShowComments(post.id)}
+                >
                   <span className="font-semibold">{post.commentCount}</span>{" "}
                   Comments
                 </span>
+
                 <span>
                   <span className="font-semibold">{post.repostCount}</span>{" "}
                   Reposts
                 </span>
               </div>
 
+              {/* Actions */}
               <div className="flex justify-around text-gray-600 mt-2 border-t border-gray-100 pt-2">
                 <button
                   onClick={() => handleLike(post.id)}
@@ -253,11 +413,7 @@ const Feed: React.FC = () => {
                 </button>
 
                 <button
-                  onClick={() =>
-                    setActiveCommentPost(
-                      activeCommentPost === post.id ? null : post.id
-                    )
-                  }
+                  onClick={() => handleShowComments(post.id)}
                   className="flex items-center gap-1 p-2 rounded-full hover:bg-gray-100"
                 >
                   <AiOutlineComment size={20} />
@@ -321,33 +477,107 @@ const Feed: React.FC = () => {
                     </div>
                   )}
                 </div>
+
+                <button className="flex items-center gap-1 p-2 rounded-full hover:bg-gray-100">
+                  <IoIosSend size={20} />
+                  <span className="hidden sm:inline">Send</span>
+                </button>
               </div>
 
+              {/* Comments Section */}
               {activeCommentPost === post.id && (
-                <div className="mt-2 flex gap-2">
-                  <input
-                    type="text"
-                    className="flex-1 border border-gray-300 rounded-md p-2"
-                    placeholder="Write a comment..."
-                    value={commentTextMap[post.id] || ""}
-                    onChange={(e) =>
-                      handleCommentChange(post.id, e.target.value)
-                    }
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleCommentSubmit(post.id);
-                    }}
-                  />
-                  <button
-                    className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition"
-                    onClick={() => handleCommentSubmit(post.id)}
-                  >
-                    Send
-                  </button>
+                <div className="mt-4 space-y-3">
+                  {/* Comment input */}
+                  <div className="flex gap-2 items-start">
+                    <MdAccountCircle className="w-10 h-10 text-gray-400 rounded-full flex-shrink-0" />
+                    <div className="flex-1 flex flex-col">
+                      <div className="flex items-center border border-gray-300 rounded-full px-3 py-1">
+                        <input
+                          type="text"
+                          placeholder="Write a comment..."
+                          value={commentTextMap[post.id] || ""}
+                          onChange={(e) =>
+                            handleCommentChange(post.id, e.target.value)
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleCommentSubmit(post.id);
+                          }}
+                          className="flex-1 outline-none py-2 px-1 rounded-full"
+                        />
+                        <BsEmojiSmile
+                          size={22}
+                          className="text-gray-500 cursor-pointer hover:text-yellow-500 ml-2"
+                          onClick={() =>
+                            setShowEmojiPickerFor(
+                              showEmojiPickerFor === post.id ? null : post.id
+                            )
+                          }
+                        />
+                      </div>
+
+                      {/* Only show Send button if input is not empty */}
+                      {commentTextMap[post.id]?.trim() && (
+                        <button
+                          className="mt-1 bg-blue-600 text-white px-4 py-1 rounded-full text-sm hover:bg-blue-700 transition self-end"
+                          onClick={() => handleCommentSubmit(post.id)}
+                        >
+                          Send
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Comments list */}
+                  <div className="space-y-3 mt-2">
+                    {(commentsMap[post.id] || []).map((comment) => (
+                      <div
+                        key={comment.commentId ?? comment.id ?? Math.random()}
+                        className="flex gap-2"
+                      >
+                        <MdAccountCircle className="w-8 h-8 text-gray-400 rounded-full flex-shrink-0" />
+                        <div className="bg-gray-100 rounded-xl px-3 py-2 flex-1">
+                          <p className="text-sm font-semibold text-gray-800">
+                            {comment.user?.name ?? "Unknown"}
+                          </p>
+                          <p className="text-sm text-gray-700 mt-1">
+                            {comment.content}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {timeSince(comment.createdAt)} ago
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Emoji picker */}
+                  {showEmojiPickerFor === post.id && (
+                    <div className="absolute z-50 bottom-12 left-0">
+                      <EmojiPicker
+                        onEmojiClick={(emojiData) =>
+                          handleCommentChange(
+                            post.id,
+                            (commentTextMap[post.id] || "") + emojiData.emoji
+                          )
+                        }
+                        width={300}
+                        height={350}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           );
         })}
+
+        {/* INFINITE SCROLL  */}
+        {hasMore && loading && (
+          <p className="text-center p-4 text-blue-600">Loading more posts...</p>
+        )}
+        {!hasMore && posts.length > 0 && (
+          <p className="text-center p-4 text-gray-500">End</p>
+        )}
       </div>
 
       {/* Repost Modal */}
@@ -358,11 +588,23 @@ const Feed: React.FC = () => {
           onSubmit={handleRepostFromModal}
         />
       )}
+
+      {/* Lightbox  Diolog*/}
+      {lightbox && (
+        <MediaLightbox
+          media={lightbox.media}
+          initialIndex={lightbox.index}
+          onClose={() => setLightbox(null)}
+        />
+      )}
     </>
   );
 };
 
-const PostMediaGrid: React.FC<{ media: MediaItem[] }> = ({ media }) => {
+export const PostMediaGrid: React.FC<{
+  media: MediaItem[];
+  onClick?: (index: number) => void;
+}> = ({ media, onClick }) => {
   const count = media.length;
 
   if (count === 1 && media[0].type === "document") {
@@ -397,12 +639,16 @@ const PostMediaGrid: React.FC<{ media: MediaItem[] }> = ({ media }) => {
       : "grid-cols-2 grid-rows-2 h-96";
 
   return (
-    <div className={`mb-4 grid ${grid} gap-0.3`}>
+    <div className={`mb-4 grid ${grid} gap-1`}>
       {media
         .filter((m) => m.type !== "document")
         .slice(0, 4)
         .map((m, i) => (
-          <div key={i} className="relative overflow-hidden rounded-[2px]">
+          <div
+            key={i}
+            className="relative overflow-hidden rounded-[2px] cursor-pointer"
+            onClick={() => onClick?.(i)}
+          >
             {m.type === "video" ? (
               <video
                 src={m.url}

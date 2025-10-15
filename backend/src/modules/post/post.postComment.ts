@@ -15,30 +15,30 @@ export class PostComment extends Model {
 
 PostComment.init(
   {
-    id: { 
-      type: DataTypes.INTEGER, 
-      autoIncrement: true, 
-      primaryKey: true 
+    id: {
+      type: DataTypes.INTEGER,
+      autoIncrement: true,
+      primaryKey: true,
     },
-    postId: { 
-      type: DataTypes.INTEGER, 
-      allowNull: false, 
-      references: { 
-        model: Post, 
-        key: "id" 
-      } 
+    postId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: Post,
+        key: "id",
+      },
     },
-    userId: { 
-      type: DataTypes.INTEGER, 
-      allowNull: false, 
-      references: { 
-        model: User, 
-        key: "id" 
-      } 
+    userId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: User,
+        key: "id",
+      },
     },
-    content: { 
-      type: DataTypes.TEXT, 
-      allowNull: false 
+    content: {
+      type: DataTypes.TEXT,
+      allowNull: false,
     },
   },
   {
@@ -49,7 +49,13 @@ PostComment.init(
   }
 );
 
-PostComment.belongsTo(User, { foreignKey: "userId" });
-PostComment.belongsTo(Post, { foreignKey: "postId" });
+
+
+
+// PostComment.belongsTo(User, { foreignKey: "userId" });
+// PostComment.belongsTo(Post, { foreignKey: "postId" });
+
+PostComment.belongsTo(User, { foreignKey: "userId", as: "user" });
+User.hasMany(PostComment, { foreignKey: "userId", as: "comments" });
 
 export default PostComment;

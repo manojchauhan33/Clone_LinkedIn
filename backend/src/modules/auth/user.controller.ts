@@ -39,7 +39,6 @@ export const verifyEmail = async (req: Request, res: Response) => {
   }
 };
 
-
 //login controller
 export const login = async (req: Request, res: Response) => {
   try {

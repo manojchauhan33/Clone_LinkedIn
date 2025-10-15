@@ -1,16 +1,31 @@
-import React, { useState, useRef, useEffect } from "react";
-import {FaRegFileAlt,FaRegCalendarAlt,FaRegImages,FaTimes,} from "react-icons/fa";
-import { BsEmojiSmile } from "react-icons/bs";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useMemo,
+  useCallback,
+  // Suspense,
+} from "react";
+import {
+  FaRegFileAlt,
+  FaRegCalendarAlt,
+  FaPoll,
+  FaTimes,
+} from "react-icons/fa";
+// import { BsEmojiSmile } from "react-icons/bs";
 import { MdOutlineEdit, MdAccountCircle } from "react-icons/md";
 import { useAuth } from "../../context/AuthContext";
 import { createPost } from "../../api/Post";
-import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
 import MediaAttachmentEditor from "./MediaAttachmentEditor";
 import DocumentAttachmentEditor from "./DocumentAttachmentEditor";
 import FilePreview from "./FilePreview";
 import PostSettingsDialog from "./PostSettingsDialog";
+import PostTextarea from "./PostTextarea";
+import { BsImage } from "react-icons/bs";
+import PostEmojiPicker from "./PostEmojiPicker";
 
-type AttachmentType = "media" | "event" | "document" | null;
+// const EmojiPicker = React.lazy(() => import("emoji-picker-react"));
+
 type DialogStep = "compose" | "media_editor" | "document_editor";
 
 interface DialogProps {
@@ -18,335 +33,486 @@ interface DialogProps {
   initialFiles?: File[];
 }
 
+interface MediaFileWithPreview {
+  file: File;
+  previewUrl: string;
+}
+
 const PostDialog = ({ close, initialFiles = [] }: DialogProps) => {
   const { user } = useAuth();
-  const [postContent, setPostContent] = useState("");
-  const [postHashtags, setPostHashtags] = useState<string | null>(null);
-  const [dialogStep, setDialogStep] = useState<DialogStep>("compose");
-  const [selectedMediaFiles, setSelectedMediaFiles] = useState<File[]>([]);
-  const [selectedDocuments, setSelectedDocuments] = useState<File[]>([]);
+  const email = user?.email;
+  // console.log("render");
+
+  // const [hashtags, setHashtags] = useState<string[]>([]);
+  const [step, setStep] = useState<DialogStep>("compose");
+  const [mediaFiles, setMediaFiles] = useState<MediaFileWithPreview[]>([]);
+  const [documents, setDocuments] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
-  const [postVisibility, setPostVisibility] = useState<"public" | "connection-only">("public");
+  const [isPosting, setIsPosting] = useState(false);
+  // const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [visibility, setVisibility] = useState<"public" | "connection-only">(
+    "public"
+  );
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const emojiButtonRef = useRef<HTMLButtonElement>(null);
+  const hashtagsRef = useRef<string[]>([]);
+
+  const handleInitialFiles = useCallback((files: File[]) => {
+    const media = files
+      .filter((f) => f.type.startsWith("image") || f.type.startsWith("video"))
+      .map((f) => ({ file: f, previewUrl: URL.createObjectURL(f) }));
+    const docs = files.filter(
+      (f) => !f.type.startsWith("image") && !f.type.startsWith("video")
+    );
+    setMediaFiles(media);
+    setDocuments(docs);
+    setStep(
+      media.length
+        ? "media_editor"
+        : docs.length
+        ? "document_editor"
+        : "compose"
+    );
+  }, []);
 
   useEffect(() => {
-    if (initialFiles.length > 0) {
-      const mediaFiles = initialFiles.filter(
-        (f) => f.type.startsWith("image") || f.type.startsWith("video")
-      );
-      const documents = initialFiles.filter(
-        (f) => !f.type.startsWith("image") && !f.type.startsWith("video")
-      );
-      setSelectedMediaFiles(mediaFiles);
-      setSelectedDocuments(documents.slice(0, 1));
-      setDialogStep(
-        mediaFiles.length > 0
-          ? "media_editor"
-          : documents.length > 0
-          ? "document_editor"
-          : "compose"
-      );
-    }
-  }, [initialFiles]);
+    if (initialFiles.length > 0) handleInitialFiles(initialFiles);
+  }, [initialFiles, handleInitialFiles]);
 
   useEffect(() => {
-    const hashtagRegex = /(^|\s)#([A-Za-z0-9_]+)/g;
-    const matches: string[] = [];
-    let match;
-    while ((match = hashtagRegex.exec(postContent)) !== null) {
-      matches.push(match[2]);
-    }
-    setPostHashtags(matches.length > 0 ? matches.join(",") : null);
-  }, [postContent]);
+    return () => mediaFiles.forEach((m) => URL.revokeObjectURL(m.previewUrl));
+  }, []);
+  //mediaFiles
 
-  const triggerFileInput = (
-    accept: string,
-    type: "media" | "document",
-    allowMultiple = false
-  ) => {
-    if (!fileInputRef.current) return;
-    fileInputRef.current.value = "";
-    fileInputRef.current.setAttribute("accept", accept);
-    fileInputRef.current.multiple = allowMultiple;
-    fileInputRef.current.onchange = (e) =>
-      handleFileChange(
-        e as unknown as React.ChangeEvent<HTMLInputElement>,
-        type
-      );
-    fileInputRef.current.click();
-  };
 
-  const handleFileChange = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    type: "media" | "document"
-  ) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-    const filesArray = Array.from(e.target.files);
-    const MAX_SIZE_MB = 100;
-    const oversized = filesArray.find(
-      (f) => f.size > MAX_SIZE_MB * 1024 * 1024
+  // const extractHashtags = useCallback(() => {
+  //   const content = textareaRef.current?.value || "";
+  //   const matches = Array.from(
+  //     new Set(content.match(/#[\w]+/g)?.map((tag) => tag.toLowerCase()))
+  //   );
+  //   setHashtags(matches || []);
+  // }, []);
+
+  const extractHashtags = useCallback(() => {
+    const content = textareaRef.current?.value || "";
+    const matches = Array.from(
+      new Set(content.match(/#[\w]+/g)?.map((tag) => tag.toLowerCase()))
     );
-    if (oversized) {
-      setError(
-        `File "${oversized.name}" is too large. Max is ${MAX_SIZE_MB} MB`
-      );
-      return;
-    }
-    if (type === "media") {
-      setSelectedMediaFiles([...selectedMediaFiles, ...filesArray]);
-      setDialogStep("media_editor");
-    } else {
-      setSelectedDocuments([filesArray[0]]);
-      setDialogStep("document_editor");
-    }
-    setError(null);
-  };
+    hashtagsRef.current = matches || [];
+  }, []);
 
-  const removeMediaFile = (index: number) =>
-    setSelectedMediaFiles(selectedMediaFiles.filter((_, i) => i !== index));
-  const removeDocument = (index: number) =>
-    setSelectedDocuments(selectedDocuments.filter((_, i) => i !== index));
+  const handleFileChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>, type: "media" | "document") => {
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
 
-  const onEmojiClick = (emojiData: EmojiClickData) => {
-    const emoji = emojiData.emoji;
-    if (!textareaRef.current) {
-      setPostContent((prev) => prev + emoji);
-      return;
-    }
-    const textarea = textareaRef.current;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    setPostContent(
-      postContent.slice(0, start) + emoji + postContent.slice(end)
-    );
-    requestAnimationFrame(() => {
-      textarea.selectionStart = textarea.selectionEnd = start + emoji.length;
-      textarea.focus();
-    });
-  };
+      const MAX_SIZE_MB = 100;
+      const tooLarge = files.find((f) => f.size > MAX_SIZE_MB * 1024 * 1024);
+      if (tooLarge)
+        return setError(`File "${tooLarge.name}" exceeds ${MAX_SIZE_MB} MB.`);
+
+      if (type === "media") {
+        const newMedia = files.map((f) => ({
+          file: f,
+          previewUrl: URL.createObjectURL(f),
+        }));
+        setMediaFiles((prev) => [...prev, ...newMedia]);
+        setStep("media_editor");
+      } else {
+        setDocuments([files[0]]);
+        setStep("document_editor");
+      }
+
+      setError(null);
+    },
+    []
+  );
+
+  const triggerFilePicker = useCallback(
+    (accept: string, type: "media" | "document", multiple = false) => {
+      if (!fileInputRef.current) return;
+      fileInputRef.current.value = "";
+      fileInputRef.current.accept = accept;
+      fileInputRef.current.multiple = multiple;
+      fileInputRef.current.onchange = (e) =>
+        handleFileChange(
+          e as unknown as React.ChangeEvent<HTMLInputElement>,
+          type
+        );
+      fileInputRef.current.click();
+    },
+    [handleFileChange]
+  );
+
+  const removeAllMedia = useCallback(() => {
+    mediaFiles.forEach((m) => URL.revokeObjectURL(m.previewUrl));
+    setMediaFiles([]);
+  }, [mediaFiles]);
+
+  const removeDocument = useCallback(
+    (index: number) =>
+      setDocuments((prev) => prev.filter((_, i) => i !== index)),
+    []
+  );
+
+  // const addEmoji = useCallback(
+  //   (emoji: string) => {
+  //     const textarea = textareaRef.current;
+  //     if (!textarea) return;
+  //     const start = textarea.selectionStart;
+  //     const end = textarea.selectionEnd;
+  //     textarea.value =
+  //       textarea.value.slice(0, start) + emoji + textarea.value.slice(end);
+  //     textarea.selectionStart = textarea.selectionEnd = start + emoji.length;
+  //     textarea.focus();
+  //     extractHashtags();
+  //   },
+  //   [extractHashtags]
+
+  // );
+
+  // const handleEmojiClick = useCallback(
+  //   (emojiData: { emoji: string }) => {
+  //     addEmoji(emojiData.emoji);
+  //   },
+  //   [addEmoji]
+  // );
+
+  // const emojiPickerElement = useMemo(() => {
+  //   if (!showEmojiPicker) return null;
+
+  //   return (
+  //     <div className="absolute bottom-16 right-4 z-10">
+  //       {/* <Suspense fallback={<div>Loading emojis...</div>}> */}
+  //       <EmojiPicker onEmojiClick={handleEmojiClick} />
+  //       {/* </Suspense> */}
+  //     </div>
+  //   );
+  // }, [showEmojiPicker, handleEmojiClick]);
+
+  // const handleSubmit = useCallback(async () => {
+  //   const content = textareaRef.current?.value || "";
+  //   extractHashtags();
+
+  //   if (!content.trim() && mediaFiles.length === 0 && documents.length === 0)
+  //     return;
+
+  //   try {
+  //     setIsPosting(true);
+  //     setError(null);
+  //     const allFiles = [...mediaFiles.map((m) => m.file), ...documents];
+  //     await createPost(
+  //       {
+  //         content: content.trim() || null,
+  //         hashtags: hashtags.join(","),
+  //         postType: visibility,
+  //       },
+  //       allFiles
+  //     );
+  //     close();
+  //   } catch (err) {
+  //     setError(err instanceof Error ? err.message : "Failed to create post");
+  //   } finally {
+  //     setIsPosting(false);
+  //   }
+  // }, [mediaFiles, documents, hashtags, visibility, close, extractHashtags]);
 
   const handleSubmit = async () => {
+    extractHashtags();
+    const hashtags = hashtagsRef.current; // use them here
+    const content = textareaRef.current?.value || "";
+
+    if (!content.trim() && mediaFiles.length === 0 && documents.length === 0)
+      return;
+
+    setIsPosting(true);
     try {
-      setError(null);
-      setIsSubmitting(true);
-      const content = postContent.trim() || null;
-      const allFiles = [...selectedMediaFiles, ...selectedDocuments];
       await createPost(
-        { content, hashtags: postHashtags, postType: postVisibility },
-        allFiles
+        {
+          content: content.trim() || null,
+          hashtags: hashtags.join(","),
+          postType: visibility,
+        },
+        [...mediaFiles.map((m) => m.file), ...documents]
       );
       close();
-    } catch (err: unknown) {
-      if (err instanceof Error) setError(err.message);
-      else setError("Failed to create post");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create post");
     } finally {
-      setIsSubmitting(false);
+      setIsPosting(false);
     }
   };
 
-  const attachmentOptions = [
-    {
-      icon: <FaRegImages className="w-6 h-6 text-blue-500" />,
-      label: "Media",
-      onClick: () => triggerFileInput("image/*,video/*", "media", true),
-      type: "media" as AttachmentType,
-    },
-    {
-      icon: <FaRegCalendarAlt className="w-6 h-6 text-red-500" />,
-      label: "Event",
-      onClick: () =>{ 
-        console.log("Not implemented")        //no idea about it i will build it before 
+  const attachments = useMemo(
+    () => [
+      {
+        icon: <BsImage className="w-6 h-6 text-gray-400" />,
+        label: "Media",
+        onClick: () => triggerFilePicker("image/*,video/*", "media", true),
       },
-      type: "event" as AttachmentType,
-    },
-    {
-      icon: <FaRegFileAlt className="w-6 h-6 text-purple-500" />,
-      label: "Document",
-      onClick: () =>
-        triggerFileInput(
-          "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          "document"
-        ),
-      type: "document" as AttachmentType,
-    },
-  ];
+      {
+        icon: <FaRegFileAlt className="w-6 h-6 text-gray-400" />,
+        label: "Document",
+        onClick: () =>
+          triggerFilePicker(
+            "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "document"
+          ),
+      },
+      {
+        icon: <FaRegCalendarAlt className="w-6 h-6 text-gray-400" />,
+        label: "Event",
+        // onClick: () => alert("Event posting not implemented yet."),
+      },
+      {
+        icon: <FaPoll className="w-6 h-6 text-gray-400" />,
+        label: "Poll",
+        // onClick: () => alert("Event posting not implemented yet."),
+      },
+    ],
+    [triggerFilePicker]
+  );
 
-  const isPostDisabled =
-    isSubmitting ||
-    (!postContent.trim() &&
-      selectedMediaFiles.length === 0 &&
-      selectedDocuments.length === 0);
+  const isDisabled =
+    isPosting ||
+    (mediaFiles.length === 0 &&
+      documents.length === 0 &&
+      !textareaRef.current?.value.trim());
 
   return (
-    <div className="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center z-50 p-4">
-      <div className="bg-white w-full max-w-4xl rounded-xl shadow-2xl relative flex flex-col max-h-[90vh] min-h-[600px]">
-        {/* Header */}
+    <div className="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-start justify-center z-50 p-4 pt-16">
+      <div className="bg-white w-full max-w-3xl rounded-md relative flex flex-col h-[650px] overflow-hidden">
         <div className="p-4 border-b flex justify-between items-center">
           <h2 className="text-xl font-semibold text-gray-800">
-            {dialogStep === "compose"
-              ? "Create a post"
-              : dialogStep === "media_editor"
+            {step === "compose"
+              ? "Create a Post"
+              : step === "media_editor"
               ? "Edit Media"
               : "Edit Document"}
           </h2>
-
           <button
-            type="button"
+            aria-label="close"
             onClick={close}
-            aria-label="Close post dialog"
-            className="text-gray-500 hover:bg-gray-100 p-2 rounded-full text-2xl"
-            disabled={isSubmitting}
+            className="text-black p-2 rounded-full text-xl"
+            disabled={isPosting}
           >
             <FaTimes />
           </button>
         </div>
 
-        {dialogStep === "compose" && (
-          <div
-            className="p-4 flex items-center gap-2 cursor-pointer hover:bg-gray-100 rounded-lg transition"
-            onClick={() => setShowSettingsDialog(true)}
-          >
-            <MdAccountCircle className="w-12 h-12 text-gray-400" />
-            <div className="flex flex-col items-start">
-              <h3 className="font-semibold text-gray-800 text-base">
-                {user?.email}
-              </h3>
-              <span className="text-xs font-medium text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full mt-0.5">
-                {postVisibility === "public"
-                  ? "Post to Anyone"
-                  : "Post to Connections"}
-              </span>
-            </div>
-          </div>
-        )}
-
-        
-        <div className="px-4 flex-1 overflow-y-auto relative py-2">
-          {dialogStep === "compose" && (
+        <div className="flex-1 overflow-y-auto p-4 relative custom-scrollbar">
+          {step === "compose" && (
             <>
-              <textarea
-                ref={textareaRef}
-                value={postContent}
-                onChange={(e) => setPostContent(e.target.value)}
-                placeholder="What do you want to talk about?"
-                className="w-full text-lg p-2 border border-gray-200 rounded resize-none focus:outline-none min-h-[300px]"
-                disabled={isSubmitting}
-              />
+              <div
+                className="flex items-center gap-2 mb-4 cursor-pointer hover:bg-gray-100 p-2 rounded-lg"
+                onClick={() => setShowSettings(true)}
+              >
+                <MdAccountCircle className="w-12 h-12 text-gray-400" />
+                <div>
+                  <h3 className="font-semibold text-gray-800">{email}</h3>
+                  <span className="text-xs font-medium bg-gray-200 px-2 py-0.5 rounded-full">
+                    {visibility === "public"
+                      ? "Post to Anyone"
+                      : "Connections only"}
+                  </span>
+                </div>
+              </div>
 
-              <div className="flex flex-col space-y-4 mt-4">
-                {selectedMediaFiles.map((file, idx) => {
-                  const isVideo = file.type.startsWith("video");
-                  const previewUrl = URL.createObjectURL(file);
-                  return (
-                    <div
-                      key={idx}
-                      className="relative rounded-lg overflow-hidden border border-gray-300"
-                    >
-                      {isVideo ? (
+              {/* Textarea */}
+              <PostTextarea ref={textareaRef} disabled={isPosting} />
+
+              {/* Media Buttons Top */}
+              {mediaFiles.length > 0 && (
+                // <div className="absolute top-40 right-2 flex gap-2">
+                <div className="absolute top-[10.25rem] right-2 flex gap-2">
+                  <button
+                    aria-label="editor"
+                    onClick={() => setStep("media_editor")}
+                    className="bg-black text-white p-1 rounded-full"
+                  >
+                    <MdOutlineEdit size={20} />
+                  </button>
+                  <button
+                    aria-label="remove-all"
+                    onClick={removeAllMedia}
+                    className="bg-black text-white p-1 rounded-full"
+                  >
+                    <FaTimes size={20} />
+                  </button>
+                </div>
+              )}
+
+              <div className="mt-4 grid gap-2">
+                {mediaFiles.length === 1 && (
+                  <div className="relative">
+                    {mediaFiles[0].file.type.startsWith("video") ? (
+                      <video
+                        src={mediaFiles[0].previewUrl}
+                        controls
+                        className="w-full max-h-[400px] object-cover rounded"
+                      />
+                    ) : (
+                      <img
+                        src={mediaFiles[0].previewUrl}
+                        className="w-full max-h-[400px] object-cover rounded"
+                        alt=""
+                      />
+                    )}
+                  </div>
+                )}
+
+                {mediaFiles.length === 2 && (
+                  <div className="grid grid-cols-2 gap-0.5">
+                    {mediaFiles.map((m, idx) =>
+                      m.file.type.startsWith("video") ? (
                         <video
-                          src={previewUrl}
+                          key={idx}
+                          src={m.previewUrl}
                           controls
-                          className="w-full h-auto rounded-lg object-cover"
+                          className="w-full h-48 object-cover rounded"
                         />
                       ) : (
                         <img
-                          src={previewUrl}
-                          alt={`Preview ${idx}`}
-                          className="w-full h-auto rounded-lg object-cover"
+                          key={idx}
+                          src={m.previewUrl}
+                          className="w-full h-48 object-cover rounded"
+                          alt=""
+                        />
+                      )
+                    )}
+                  </div>
+                )}
+
+                {mediaFiles.length > 2 && mediaFiles.length <= 4 && (
+                  <div className="grid gap-0.5">
+                    <div className="relative">
+                      {mediaFiles[0].file.type.startsWith("video") ? (
+                        <video
+                          src={mediaFiles[0].previewUrl}
+                          controls
+                          className="w-full max-h-[400px] object-cover rounded"
+                        />
+                      ) : (
+                        <img
+                          src={mediaFiles[0].previewUrl}
+                          className="w-full max-h-[400px] object-cover rounded"
+                          alt=""
                         />
                       )}
-                      <button
-                        type="button"
-                        onClick={() => removeMediaFile(idx)}
-                        aria-label="Remove media file"
-                        className="absolute top-1 right-2 text-red-500 p-2 rounded-full shadow-md"
-                      >
-                        <FaTimes size={15} />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setDialogStep("media_editor")}
-                        aria-label="Edit media file"
-                        className="absolute top-1 right-16 text-black py-2 rounded-full"
-                      >
-                        <MdOutlineEdit size={25} />
-                      </button>
                     </div>
-                  );
-                })}
-
-                {selectedDocuments.map((file, idx) => (
-                  <div
-                    key={idx}
-                    className="relative border border-gray-300 rounded-lg bg-gray-50 p-4 flex items-start"
-                  >
-                    <div className="flex-1">
-                      <FilePreview
-                        file={file}
-                        removeFile={() => removeDocument(idx)}
-                      />
-                    </div>
-                    <div className="flex flex-col space-y-2 ml-4">
-                      <button
-                        type="button"
-                        onClick={() => setDialogStep("document_editor")}
-                        aria-label="Edit document"
-                        className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-200 hover:bg-gray-300 text-black"
-                      >
-                        <MdOutlineEdit size={20} />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => removeDocument(idx)}
-                        aria-label="Remove document"
-                        className="flex items-center justify-center w-10 h-10 rounded-full bg-red-500 hover:bg-red-600 text-white"
-                      >
-                        <FaTimes size={16} />
-                      </button>
+                    <div
+                      className={`grid grid-cols-${
+                        mediaFiles.length - 1
+                      } gap-0.5 mt-1`}
+                    >
+                      {mediaFiles
+                        .slice(1)
+                        .map((m, idx) =>
+                          m.file.type.startsWith("video") ? (
+                            <video
+                              key={idx + 1}
+                              src={m.previewUrl}
+                              controls
+                              className="w-full h-48 object-cover rounded"
+                            />
+                          ) : (
+                            <img
+                              key={idx + 1}
+                              src={m.previewUrl}
+                              className="w-full h-48 object-cover rounded"
+                              alt=""
+                            />
+                          )
+                        )}
                     </div>
                   </div>
+                )}
+
+                {mediaFiles.length > 4 && (
+                  <div className="grid gap-0.5">
+                    <div className="relative">
+                      {mediaFiles[0].file.type.startsWith("video") ? (
+                        <video
+                          src={mediaFiles[0].previewUrl}
+                          controls
+                          className="w-full max-h-[400px] object-cover rounded"
+                        />
+                      ) : (
+                        <img
+                          src={mediaFiles[0].previewUrl}
+                          className="w-full max-h-[400px] object-cover rounded"
+                          alt=""
+                        />
+                      )}
+                    </div>
+                    <div className="grid grid-cols-3 gap-0.5 mt-1 relative">
+                      {mediaFiles
+                        .slice(1, 4)
+                        .map((m, idx) =>
+                          m.file.type.startsWith("video") ? (
+                            <video
+                              key={idx + 1}
+                              src={m.previewUrl}
+                              controls
+                              className="w-full h-48 object-cover rounded"
+                            />
+                          ) : (
+                            <img
+                              key={idx + 1}
+                              src={m.previewUrl}
+                              className="w-full h-48 object-cover rounded"
+                              alt=""
+                            />
+                          )
+                        )}
+                      {mediaFiles.length > 4 && (
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white text-2xl font-bold rounded">
+                          +{mediaFiles.length - 4}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {documents.map((file, idx) => (
+                  <FilePreview
+                    key={idx}
+                    file={file}
+                    removeFile={() => removeDocument(idx)}
+                  />
                 ))}
               </div>
             </>
           )}
 
-          {/* {dialogStep === "media_editor" && selectedMediaFiles.length > 0 && (
+          {step === "media_editor" && (
             <MediaAttachmentEditor
-              files={selectedMediaFiles}
-              onClose={() => setDialogStep("compose")}
-              onUpdate={setSelectedMediaFiles}
+              files={mediaFiles.map((m) => m.file)}
+              onClose={() => setStep("compose")}
+              onUpdate={(updatedFiles) => {
+                mediaFiles.forEach((m) => URL.revokeObjectURL(m.previewUrl));
+                const newMedia = updatedFiles.map((f) => ({
+                  file: f,
+                  previewUrl: URL.createObjectURL(f),
+                }));
+                setMediaFiles(newMedia);
+                setStep("compose");
+              }}
               onAddMore={() =>
-                triggerFileInput("image/*,video/*", "media", true)
-              }
-            />
-          )} */}
-
-          {dialogStep === "media_editor" && (
-            <MediaAttachmentEditor
-              files={selectedMediaFiles}
-              onClose={() => setDialogStep("compose")}
-              onUpdate={setSelectedMediaFiles}
-              onAddMore={() =>
-                triggerFileInput("image/*,video/*", "media", true)
+                triggerFilePicker("image/*,video/*", "media", true)
               }
             />
           )}
 
-          {dialogStep === "document_editor" && selectedDocuments.length > 0 && (
+          {step === "document_editor" && (
             <DocumentAttachmentEditor
-              files={selectedDocuments}
-              onClose={() => setDialogStep("compose")}
-              onUpdate={setSelectedDocuments}
+              files={documents}
+              onClose={() => setStep("compose")}
+              onUpdate={setDocuments}
               onAddMore={() =>
-                triggerFileInput(
+                triggerFilePicker(
                   "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                   "document"
                 )
@@ -354,68 +520,63 @@ const PostDialog = ({ close, initialFiles = [] }: DialogProps) => {
             />
           )}
 
-          {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
-          {/* <input type="file" ref={fileInputRef} className="hidden" /> */}
-          <input
-            type="file"
-            ref={fileInputRef}
-            className="hidden"
-            aria-label="Attach media or document files"
-            title="Attach media or document files"
-          />
+          {error && <p className="text-red-500 text-sm mt-3">{error}</p>}
+          <input ref={fileInputRef} type="file" hidden />
         </div>
 
-        {dialogStep === "compose" && (
-          <div className="p-4 border-t flex flex-col sm:flex-row justify-between items-center">
-            <div className="flex space-x-2 items-center">
-              {attachmentOptions.map((opt) => (
+        {step === "compose" && (
+          <div className="p-4 border-t flex flex-wrap justify-between items-center gap-2">
+            <div className="flex space-x-2">
+              {attachments.map((a, i) => (
                 <button
-                  key={opt.type}
-                  onClick={opt.onClick}
-                  className="flex items-center space-x-1 px-3 py-2 hover:bg-gray-100 rounded-lg transition"
+                  key={i}
+                  onClick={a.onClick}
+                  className="flex items-center gap-2 px-3 py-2 hover:bg-gray-100 rounded-lg"
                 >
-                  {opt.icon}
-                  <span className="text-sm text-gray-700 hidden sm:inline">
-                    {opt.label}
-                  </span>
+                  {a.icon}
+                  <span className="hidden sm:inline text-sm">{a.label}</span>
                 </button>
               ))}
-              <button
+              {/* <button
                 type="button"
-                ref={emojiButtonRef}
-                onClick={() => setShowEmojiPicker((prev) => !prev)}
-                aria-label="Toggle emoji picker"
-                className="text-gray-500 hover:text-gray-700 p-2 rounded-lg"
+                aria-label="emoji picker"
+                onClick={() => setShowEmojiPicker((p) => !p)}
+                className="p-2 text-gray-500 hover:text-gray-700"
               >
-                <BsEmojiSmile size={26} />
-              </button>
+                <BsEmojiSmile size={24} />
+              </button> */}
 
-              {showEmojiPicker && (
-                <div className="absolute bottom-12 left-0 sm:left-auto sm:right-0 z-10">
-                  <EmojiPicker onEmojiClick={onEmojiClick} />
+              {/* {showEmojiPicker && (
+                <div className="absolute bottom-16 right-4 z-10">
+                    <EmojiPicker onEmojiClick={(e) => addEmoji(e.emoji)} />
                 </div>
-              )}
+              )} */}
+
+              {/* {emojiPickerElement} */}
+
+              <PostEmojiPicker textareaRef={textareaRef} />
             </div>
+
             <button
               onClick={handleSubmit}
-              disabled={isPostDisabled}
-              className={`px-6 py-2 rounded-full font-semibold text-base shadow-md ${
-                isPostDisabled
+              disabled={isDisabled}
+              className={`px-6 py-2 rounded-full font-semibold ${
+                isDisabled
                   ? "bg-blue-300 cursor-not-allowed"
                   : "bg-blue-600 text-white hover:bg-blue-700"
               }`}
             >
-              {isSubmitting ? "Posting..." : "Post"}
+              {isPosting ? "Posting..." : "Post"}
             </button>
           </div>
         )}
       </div>
 
-      {showSettingsDialog && (
+      {showSettings && (
         <PostSettingsDialog
-          close={() => setShowSettingsDialog(false)}
-          currentVisibility={postVisibility}
-          onUpdate={setPostVisibility}
+          close={() => setShowSettings(false)}
+          currentVisibility={visibility}
+          onUpdate={setVisibility}
         />
       )}
     </div>

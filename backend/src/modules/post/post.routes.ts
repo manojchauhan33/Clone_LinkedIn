@@ -3,6 +3,9 @@ import {
   commentPostHandler,
   createPost,
   fetchPosts,
+  getPostCommentsHandler,
+  getPostLikesHandler,
+  getPostRepostsHandler,
   likePostHandler,
   repostPostHandler,
 } from "./post.controller";
@@ -16,5 +19,8 @@ router.get("/", authenticate, fetchPosts);
 router.post("/:id/like", authenticate, likePostHandler);
 router.post("/:id/comment", authenticate, commentPostHandler);
 router.post("/:id/repost", authenticate, repostPostHandler);
+router.get("/:id/likes", authenticate, getPostLikesHandler);
+router.get("/:id/comments",authenticate,getPostCommentsHandler);
+router.get("/:id/reposts",authenticate,getPostRepostsHandler);
 
 export default router;
