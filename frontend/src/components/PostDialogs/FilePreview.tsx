@@ -65,4 +65,3 @@ const FilePreview = ({ file }: FilePreviewProps) => {
 };
 
 export default FilePreview;
-

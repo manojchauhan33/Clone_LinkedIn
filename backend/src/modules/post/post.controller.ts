@@ -183,7 +183,6 @@ export const getPostCommentsHandler = async (
   }
 };
 
-// Reposts
 export const getPostRepostsHandler = async (
   req: AuthenticatedRequest,
   res: Response
@@ -193,8 +192,16 @@ export const getPostRepostsHandler = async (
     return res.status(400).json({ message: "Invalid post ID" });
 
   try {
-    const reposts = await getPostRepostsService(postId);
-    res.status(200).json({ message: "Reposts fetched successfully", reposts });
+    
+    const { originalPost, reposts } = await getPostRepostsService(postId);
+    // const totalReposts = reposts.length;
+    // console.log("Total reposts:", totalReposts);
+    res.status(200).json({
+      message: "Reposts fetched successfully",
+      originalPost, 
+      reposts,
+    });
+    
   } catch (err: any) {
     res
       .status(err.statusCode || 500)

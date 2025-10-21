@@ -7,6 +7,8 @@ import {
   commentPost,
   // getPostLikes,
   getPostComments,
+  getPostReposts,
+  PostRepostUser,
 } from "../../api/Post";
 
 import {
@@ -24,16 +26,30 @@ import { useAuth } from "../../context/AuthContext";
 import EmojiPicker from "emoji-picker-react";
 import { BsEmojiSmile } from "react-icons/bs";
 import ReactionsBox from "./ReactionsBox";
+import RepostDialog from "./RepostDialog";
+// import SkeletonLoader from "../route/SkeletonLoader";
 
-interface RepostingPost {
+export interface RepostingPost {
   post: PostType;
   openDropdown: boolean;
 }
 
-interface MediaItem {
+export interface MediaItem {
   type: "image" | "video" | "document";
   url: string;
 }
+
+// interface PostCommentUser {
+//   commentId?: number;
+//   id?: number;
+//   content: string;
+//   createdAt: string;
+//   user?: {
+//     id: number;
+//     email: string;
+//     name: string;
+//   };
+// }
 
 interface PostCommentUser {
   commentId?: number;
@@ -42,28 +58,54 @@ interface PostCommentUser {
   createdAt: string;
   user?: {
     id: number;
-    email: string;
     name: string;
+    email?: string;
+  };
+}
+
+interface CommentFromAPI {
+  commentId?: number;
+  id?: number;
+  content: string;
+  createdAt: string;
+  user?: {
+    id: number;
+    name: string;
+    email?: string;
   };
 }
 
 const Feed: React.FC = () => {
+  // console.log("f");
   const { user } = useAuth();
   const [posts, setPosts] = useState<PostType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeCommentPost, setActiveCommentPost] = useState<number | null>(null);
-  const [commentTextMap, setCommentTextMap] = useState<Record<number, string>>({});
-  const [commentsMap, setCommentsMap] = useState<Record<number, PostCommentUser[]>>({});
+  const [activeCommentPost, setActiveCommentPost] = useState<number | null>(
+    null
+  );
+  const [commentTextMap, setCommentTextMap] = useState<Record<number, string>>(
+    {}
+  );
+  const [commentsMap, setCommentsMap] = useState<
+    Record<number, PostCommentUser[]>
+  >({});
   const [reposting, setReposting] = useState<RepostingPost | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<PostType | null>(null);
   const [likedPosts, setLikedPosts] = useState<Set<number>>(new Set());
   const [repostedPosts, setRepostedPosts] = useState<Set<number>>(new Set());
   const [repostPending, setRepostPending] = useState<Set<number>>(new Set());
-  const [lightbox, setLightbox] = useState<{media: MediaItem[];index: number;} | null>(null);
-  const [showEmojiPickerFor, setShowEmojiPickerFor] = useState<number | null>(null );
+  const [lightbox, setLightbox] = useState<{
+    media: MediaItem[];
+    index: number;
+  } | null>(null);
+  const [showEmojiPickerFor, setShowEmojiPickerFor] = useState<number | null>(
+    null
+  );
   const [activeLikesBox, setActiveLikesBox] = useState<number | null>(null);
-
+  const [repostModalPost, setRepostModalPost] = useState<PostType | null>(null);
+  const [repostList, setRepostList] = useState<PostRepostUser[]>([]);
+  const [repostLoading, setRepostLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const limit = 5;
@@ -280,11 +322,26 @@ const Feed: React.FC = () => {
 
     try {
       // Send comment to backend
-      const newComment = await commentPost(postId, text);
+      // const newComment = await commentPost(postId, text);
 
-      const safeComment = {
+      // const safeComment = {
+      //   ...newComment.comment,
+      //   // user: newComment.comment.user || { name: "Unknown", id: 0, email: "" },
+      //   user: newComment.comment.user,
+      // };
+
+      // setCommentsMap((prev) => ({
+      //   ...prev,
+      //   [postId]: [safeComment, ...(prev[postId] || [])],
+      // }));
+      const newComment: { comment: CommentFromAPI } = await commentPost(
+        postId,
+        text
+      );
+
+      const safeComment: PostCommentUser = {
         ...newComment.comment,
-        user: newComment.comment.user || { name: "Unknown", id: 0, email: "" },
+        user: newComment.comment.user || { id: 0, name: "Unknown", email: "" },
       };
 
       setCommentsMap((prev) => ({
@@ -318,8 +375,23 @@ const Feed: React.FC = () => {
     }
   };
 
+  const handleShowReposts = async (post: PostType) => {
+    setRepostModalPost(post);
+    setRepostLoading(true);
+    try {
+      const reposts = await getPostReposts(post.id);
+      setRepostList(reposts);
+    } catch (err) {
+      console.error(err);
+      setRepostList([]);
+    } finally {
+      setRepostLoading(false);
+    }
+  };
+
   if (posts.length === 0 && loading)
     return <p className="text-center p-8">Loading feed...</p>;
+  // return <SkeletonLoader />;
   if (error) return <p className="text-center p-8 text-red-500">{error}</p>;
   if (posts.length === 0 && !loading)
     return <p className="text-center p-8 text-gray-500">No posts available.</p>;
@@ -394,10 +466,25 @@ const Feed: React.FC = () => {
                   Comments
                 </span>
 
-                <span>
+                {/* <span>
+                  <span className="font-semibold">{post.repostCount}</span>{" "}
+                  Reposts
+                </span> */}
+                <span
+                  className="cursor-pointer hover:text-blue-600"
+                  onClick={() => handleShowReposts(post)}
+                >
                   <span className="font-semibold">{post.repostCount}</span>{" "}
                   Reposts
                 </span>
+
+                {repostModalPost && (
+                  <RepostDialog
+                    onClose={() => setRepostModalPost(null)}
+                    reposts={repostList}
+                    loading={repostLoading}
+                  />
+                )}
               </div>
 
               {/* Actions */}
@@ -571,13 +658,12 @@ const Feed: React.FC = () => {
           );
         })}
 
-        {/* INFINITE SCROLL  */}
         {hasMore && loading && (
           <p className="text-center p-4 text-blue-600">Loading more posts...</p>
         )}
-        {!hasMore && posts.length > 0 && (
-          <p className="text-center p-4 text-gray-500">End</p>
-        )}
+        {/* {!hasMore && posts.length > 0 && (
+          <p>End</p>
+        )} */}
       </div>
 
       {/* Repost Modal */}

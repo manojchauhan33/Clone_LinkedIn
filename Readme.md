@@ -13,3 +13,8 @@ Optional validation
 Kabhi-kabhi counters Post aur actual PostComment/PostLike rows mismatch ho sakte hain.
 
 Periodically cron job ya migration script se counters sync kar sakte ho.
+
+
+git add.
+git commit -m "first commit"
+git push

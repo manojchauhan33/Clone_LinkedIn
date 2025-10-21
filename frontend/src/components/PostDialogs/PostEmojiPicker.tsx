@@ -12,6 +12,7 @@ type Props = {
 
 
 const PostEmojiPicker = ({ textareaRef }: Props) => {
+  // console.log("+");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   const handleEmojiClick = useCallback(

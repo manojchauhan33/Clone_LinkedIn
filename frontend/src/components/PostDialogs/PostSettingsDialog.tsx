@@ -52,7 +52,7 @@ const PostSettingsDialog: React.FC<SettingsDialogProps> = ({
         </div>
 
         <div className="p-4 space-y-2">
-          <h3 className="font-semibold text-gray-700 mb-3">
+          <h3 className="font-semibold text-gray-900 mb-3">
             Who can see your post?
           </h3>
           {options.map((option) => (

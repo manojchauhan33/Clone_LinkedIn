@@ -57,7 +57,7 @@ const DocumentAttachmentEditor = ({
           onClick={onClose}
           className="px-6 py-2 bg-blue-600 text-white rounded-full font-semibold hover:bg-blue-700"
         >
-          Done
+          Next
         </button>
       </div>
     </div>

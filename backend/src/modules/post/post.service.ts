@@ -63,47 +63,6 @@ export const PostService = {
 };
 
 // FETCH POSTS
-// export const getPostsService = async (userId: number) => {
-//   try {
-//     const posts = await Post.findAll({
-//       where: { isRepost: false },
-//       order: [["createdAt", "DESC"]],
-//       include: [
-//         {
-//           model: User,
-//           as: "author",
-//           attributes: ["id", "email"],
-//           include: [
-//             {
-//               model: Profile,
-//               as: "profile",
-//               attributes: ["name"],
-//             },
-//           ],
-//         },
-//         { model: Post, as: "originalPost" },
-//         { model: Post, as: "reposts" },
-//       ],
-//     });
-
-//     const likedPosts = await PostLike.findAll({ where: { userId } });
-//     const repostedPosts = await PostRepost.findAll({ where: { userId } });
-
-//     const likedPostIds = new Set(likedPosts.map((like) => like.postId));
-//     const repostedPostIds = new Set(repostedPosts.map((r) => r.postId));
-
-//     const enrichedPosts = posts.map((post: any) => ({
-//       ...post.toJSON(),
-//       likedByCurrentUser: likedPostIds.has(post.id),
-//       repostedByCurrentUser: repostedPostIds.has(post.id),
-//     }));
-
-//     return enrichedPosts;
-//   } catch (error) {
-//     throw new Error("Failed to fetch posts");
-//   }
-// };
-
 export const getPostsService = async (userId: number, page = 1, limit = 5) => {
   const offset = (page - 1) * limit;
 
@@ -402,29 +361,35 @@ export const getPostCommentsService = async (
 };
 
 // REPOST
+
 // interface RepostWithUser {
 //   repostId: number;
-//   content: string | null;
-//   media: any[];
-//   hashtags: string | null;
-//   repostComment: string | null;
-//   user: { id: number; email: string; name?: string | null };
+//   content: string | null; // user’s comment on top
+//   media: any[];            // original post media
+//   hashtags: string | null; // original post hashtags
+//   repostComment: string | null; // optional user comment
+//   user: { id: number | null; email: string | null; name: string | null };
+//   originalPost: {        // embedded original post
+//     id: number;
+//     content: string | null;
+//     media: any[];
+//     hashtags: string | null;
+//     author: { id: number; name: string | null; email: string | null };
+//   };
 //   createdAt: Date;
 // }
-
 // export const getPostRepostsService = async (
 //   postId: number
 // ): Promise<RepostWithUser[]> => {
 //   const post = await Post.findByPk(postId);
-//   if (!post)
-//     throw Object.assign(new Error("Post not found"), { statusCode: 404 });
+//   if (!post) throw Object.assign(new Error("Post not found"), { statusCode: 404 });
 
 //   const reposts = await PostRepost.findAll({
 //     where: { postId },
 //     include: [
 //       {
 //         model: Post,
-//         as: "repostPost", // include actual repost post
+//         as: "repostPost",
 //         include: [
 //           {
 //             model: User,
@@ -434,86 +399,192 @@ export const getPostCommentsService = async (
 //           },
 //         ],
 //       },
+//       {
+//         model: User,
+//         as: "user",
+//         attributes: ["id", "email"],
+//         include: [{ model: Profile, as: "profile", attributes: ["name"] }],
+//       },
 //     ],
 //     order: [["createdAt", "DESC"]],
 //   });
 
-//   return reposts
-//     .map((r: any) => r.repostPost)
-//     .filter(Boolean)
-//     .map((p: any) => ({
-//       repostId: p.id,
-//       content: p.content,
-//       media: p.media,
-//       hashtags: p.hashtags,
-//       repostComment: p.repostComment,
-//       user: {
-//         id: p.author?.id ?? null,
-//         email: p.author?.email ?? null,
-//         name: p.author?.profile?.name ?? null,
+//   // return reposts.map((r: any) => ({
+//   //   repostId: r.id,
+//   //   content: r.repostPost?.repostComment ?? null, // only user’s comment
+//   //   media: r.repostPost?.media ?? [],             // show original media
+//   //   hashtags: r.repostPost?.hashtags ?? null,
+//   //   repostComment: r.repostPost?.repostComment ?? null,
+//   //   user: {
+//   //     id: r.user?.id ?? r.repostPost?.author?.id ?? null,
+//   //     email: r.user?.email ?? r.repostPost?.author?.email ?? null,
+//   //     name: r.user?.profile?.name ?? r.repostPost?.author?.profile?.name ?? null,
+//   //   },
+//   //   originalPost: {
+//   //     id: r.repostPost?.id,
+//   //     content: r.repostPost?.content,
+//   //     media: r.repostPost?.media ?? [],
+//   //     hashtags: r.repostPost?.hashtags ?? null,
+//   //     author: {
+//   //       id: r.repostPost?.author?.id,
+//   //       name: r.repostPost?.author?.profile?.name ?? null,
+//   //       email: r.repostPost?.author?.email ?? null,
+//   //     },
+//   //   },
+//   //   createdAt: r.createdAt,
+//   // }));
+
+//   return reposts.map((r: any) => ({
+//     repostId: r.id,
+//     repostComment: r.repostComment ?? null,  // The comment the reposting user added
+//     createdAt: r.createdAt,
+//     user: { // The user who reposted
+//       id: r.user?.id ?? null,
+//       email: r.user?.email ?? null,
+//       name: r.user?.profile?.name ?? null,
+//     },
+//     originalPost: { // The post being reposted
+//       id: r.repostPost?.id ?? null,
+//       content: r.repostPost?.content ?? null,
+//       media: r.repostPost?.media ?? [],
+//       hashtags: r.repostPost?.hashtags ?? null,
+//       author: { // Author of the original post
+//         id: r.repostPost?.author?.id ?? null,
+//         email: r.repostPost?.author?.email ?? null,
+//         name: r.repostPost?.author?.profile?.name ?? null,
 //       },
-//       createdAt: p.createdAt,
-//     }));
+//       createdAt: r.repostPost?.createdAt ?? null,
+//     },
+//   }));
+
 // };
 
+interface UserProfile {
+  name: string | null;
+}
+
+interface UserWithProfile {
+  id: number;
+  email: string;
+  profile?: UserProfile;
+}
+
+interface PostWithAuthor extends Post {
+  author?: UserWithProfile;
+}
+
+interface PostRepostWithExtras extends PostRepost {
+  repostComment?: string | null;
+  createdAt: Date;
+  repostPost?: PostWithAuthor;
+  user?: UserWithProfile;
+}
 
 interface RepostWithUser {
   repostId: number;
-  content: string | null;
-  media: any[];
-  hashtags: string | null;
   repostComment: string | null;
-  user: { id: number | null; email: string | null; name: string | null };
   createdAt: Date;
+  user: {
+    id: number | null;
+    email: string | null;
+    name: string | null;
+  };
+  originalPost: {
+    id: number | null;
+    content: string | null;
+    media: any[];
+    hashtags: string | null;
+    createdAt: Date | null;
+    author: {
+      id: number | null;
+      email: string | null;
+      name: string | null;
+    };
+  };
+}
+
+interface PostRepostsResponse {
+  originalPost: {
+    id: number;
+    content: string | null;
+    media: any[];
+    hashtags: string | null;
+    createdAt: Date;
+    author: {
+      id: number | null;
+      email: string | null;
+      name: string | null;
+    };
+  };
+  reposts: RepostWithUser[];
 }
 
 export const getPostRepostsService = async (
   postId: number
-): Promise<RepostWithUser[]> => {
-  const post = await Post.findByPk(postId);
+): Promise<PostRepostsResponse> => {
+  const post = (await Post.findByPk(postId, {
+    include: [
+      {
+        model: User,
+        as: "author",
+        attributes: ["id", "email"],
+        include: [{ model: Profile, as: "profile", attributes: ["name"] }],
+      },
+    ],
+  })) as PostWithAuthor;
+
   if (!post)
     throw Object.assign(new Error("Post not found"), { statusCode: 404 });
 
-  const reposts = await PostRepost.findAll({
-    where: { postId },
+  const reposts = (await Post.findAll({
+    where: { originalPostId: postId, isRepost: true },
     include: [
       {
-        model: Post,
-        as: "repostPost",
-        include: [
-          {
-            model: User,
-            as: "author",
-            attributes: ["id", "email"],
-            include: [
-              { model: Profile, as: "profile", attributes: ["name"] }
-            ],
-          },
-        ],
-      },
-      {
         model: User,
-        as: "user",
+        as: "author",
         attributes: ["id", "email"],
-        include: [
-          { model: Profile, as: "profile", attributes: ["name"] }
-        ],
+        include: [{ model: Profile, as: "profile", attributes: ["name"] }],
       },
     ],
     order: [["createdAt", "DESC"]],
-  });
+  })) as PostWithAuthor[];
 
-  return reposts.map((r: any) => ({
+  const formattedReposts: RepostWithUser[] = reposts.map((r) => ({
     repostId: r.id,
-    content: r.repostPost?.content ?? null,
-    media: r.repostPost?.media ?? [],
-    hashtags: r.repostPost?.hashtags ?? null,
-    repostComment: r.repostPost?.repostComment ?? r.content ?? null,
-    user: {
-      id: r.user?.id ?? r.repostPost?.author?.id ?? null,
-      email: r.user?.email ?? r.repostPost?.author?.email ?? null,
-      name: r.user?.profile?.name ?? r.repostPost?.author?.profile?.name ?? null,
-    },
+    repostComment: r.repostComment ?? null,
     createdAt: r.createdAt,
+    user: {
+      id: r.author?.id ?? null,
+      email: r.author?.email ?? null,
+      name: r.author?.profile?.name ?? null,
+    },
+    originalPost: {
+      id: post.id,
+      content: post.content ?? null,
+      media: post.media ?? [],
+      hashtags: post.hashtags ?? null,
+      createdAt: post.createdAt ?? null,
+      author: {
+        id: post.author?.id ?? null,
+        email: post.author?.email ?? null,
+        name: post.author?.profile?.name ?? null,
+      },
+    },
   }));
+
+  return {
+    originalPost: {
+      id: post.id,
+      content: post.content ?? null,
+      media: post.media ?? [],
+      hashtags: post.hashtags ?? null,
+      createdAt: post.createdAt ?? null,
+      author: {
+        id: post.author?.id ?? null,
+        email: post.author?.email ?? null,
+        name: post.author?.profile?.name ?? null,
+      },
+    },
+    reposts: formattedReposts,
+  };
 };

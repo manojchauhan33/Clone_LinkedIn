@@ -252,6 +252,34 @@ export interface PostRepostUser {
   createdAt: string;
 }
 
+interface MediaItem {
+  url: string;
+  type: "image" | "video" | "document";
+}
+
+
+export interface RepostWithUser {
+  repostId: number;
+  repostComment?: string | null;
+  user: {
+    id: number | null;
+    email: string | null;
+    name: string | null;
+  };
+  originalPost: {
+    author: {
+      name: string | null;
+    };
+    content: string | null;
+    // media: any[];
+     media: MediaItem[];
+  };
+}
+
+
+
+
+
 export const getPostReposts = async (
   postId: number
 ): Promise<PostRepostUser[]> => {

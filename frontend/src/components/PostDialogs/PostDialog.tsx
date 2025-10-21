@@ -55,6 +55,7 @@ const PostDialog = ({ close, initialFiles = [] }: DialogProps) => {
     "public"
   );
 
+  const [tempMediaFiles, setTempMediaFiles] = useState<MediaFileWithPreview[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const hashtagsRef = useRef<string[]>([]);
@@ -81,10 +82,25 @@ const PostDialog = ({ close, initialFiles = [] }: DialogProps) => {
     if (initialFiles.length > 0) handleInitialFiles(initialFiles);
   }, [initialFiles, handleInitialFiles]);
 
-  useEffect(() => {
-    return () => mediaFiles.forEach((m) => URL.revokeObjectURL(m.previewUrl));
-  }, []);
+  // useEffect(() => {
+  //   return () => mediaFiles.forEach((m) => URL.revokeObjectURL(m.previewUrl));
+  // }, []);
   //mediaFiles
+
+  const mediaFilesRef = useRef<MediaFileWithPreview[]>([]);
+
+// Keep the ref updated whenever mediaFiles changes
+useEffect(() => {
+  mediaFilesRef.current = mediaFiles;
+}, [mediaFiles]);
+
+// Cleanup URLs only once on unmount
+useEffect(() => {
+  return () => {
+    mediaFilesRef.current.forEach((m) => URL.revokeObjectURL(m.previewUrl));
+  };
+}, []);
+
 
 
   // const extractHashtags = useCallback(() => {
@@ -103,32 +119,60 @@ const PostDialog = ({ close, initialFiles = [] }: DialogProps) => {
     hashtagsRef.current = matches || [];
   }, []);
 
+  // const handleFileChange = useCallback(
+  //   (e: React.ChangeEvent<HTMLInputElement>, type: "media" | "document") => {
+  //     const files = Array.from(e.target.files || []);
+  //     if (!files.length) return;
+
+  //     const MAX_SIZE_MB = 100;
+  //     const tooLarge = files.find((f) => f.size > MAX_SIZE_MB * 1024 * 1024);
+  //     if (tooLarge)
+  //       return setError(`File "${tooLarge.name}" exceeds ${MAX_SIZE_MB} MB.`);
+
+  //     if (type === "media") {
+  //       const newMedia = files.map((f) => ({
+  //         file: f,
+  //         previewUrl: URL.createObjectURL(f),
+  //       }));
+  //       setMediaFiles((prev) => [...prev, ...newMedia]);
+  //       setStep("media_editor");
+  //     } else {
+  //       setDocuments([files[0]]);
+  //       setStep("document_editor");
+  //     }
+
+  //     setError(null);
+  //   },
+  //   []
+  // );
+
   const handleFileChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>, type: "media" | "document") => {
-      const files = Array.from(e.target.files || []);
-      if (!files.length) return;
+  (e: React.ChangeEvent<HTMLInputElement>, type: "media" | "document") => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
 
-      const MAX_SIZE_MB = 100;
-      const tooLarge = files.find((f) => f.size > MAX_SIZE_MB * 1024 * 1024);
-      if (tooLarge)
-        return setError(`File "${tooLarge.name}" exceeds ${MAX_SIZE_MB} MB.`);
+    const MAX_SIZE_MB = 100;
+    const tooLarge = files.find((f) => f.size > MAX_SIZE_MB * 1024 * 1024);
+    if (tooLarge)
+      return setError(`File "${tooLarge.name}" exceeds ${MAX_SIZE_MB} MB.`);
 
-      if (type === "media") {
-        const newMedia = files.map((f) => ({
-          file: f,
-          previewUrl: URL.createObjectURL(f),
-        }));
-        setMediaFiles((prev) => [...prev, ...newMedia]);
-        setStep("media_editor");
-      } else {
-        setDocuments([files[0]]);
-        setStep("document_editor");
-      }
+    if (type === "media") {
+      const newMedia = files.map((f) => ({
+        file: f,
+        previewUrl: URL.createObjectURL(f),
+      }));
+      setTempMediaFiles(newMedia);
+      setStep("media_editor");
+    } else {
+      setDocuments([files[0]]);
+      setStep("document_editor");
+    }
 
-      setError(null);
-    },
-    []
-  );
+    setError(null);
+  },
+  []
+);
+
 
   const triggerFilePicker = useCallback(
     (accept: string, type: "media" | "document", multiple = false) => {
@@ -283,7 +327,7 @@ const PostDialog = ({ close, initialFiles = [] }: DialogProps) => {
 
   return (
     <div className="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-start justify-center z-50 p-4 pt-16">
-      <div className="bg-white w-full max-w-3xl rounded-md relative flex flex-col h-[650px] overflow-hidden">
+      <div className="bg-white w-full max-w-3xl rounded relative flex flex-col h-[650px] overflow-hidden">
         <div className="p-4 border-b flex justify-between items-center">
           <h2 className="text-xl font-semibold text-gray-800">
             {step === "compose"
@@ -322,10 +366,7 @@ const PostDialog = ({ close, initialFiles = [] }: DialogProps) => {
 
               {/* Textarea */}
               <PostTextarea ref={textareaRef} disabled={isPosting} />
-
-              {/* Media Buttons Top */}
               {mediaFiles.length > 0 && (
-                // <div className="absolute top-40 right-2 flex gap-2">
                 <div className="absolute top-[10.25rem] right-2 flex gap-2">
                   <button
                     aria-label="editor"
@@ -487,7 +528,7 @@ const PostDialog = ({ close, initialFiles = [] }: DialogProps) => {
             </>
           )}
 
-          {step === "media_editor" && (
+          {/* {step === "media_editor" && (
             <MediaAttachmentEditor
               files={mediaFiles.map((m) => m.file)}
               onClose={() => setStep("compose")}
@@ -498,13 +539,35 @@ const PostDialog = ({ close, initialFiles = [] }: DialogProps) => {
                   previewUrl: URL.createObjectURL(f),
                 }));
                 setMediaFiles(newMedia);
-                setStep("compose");
+                // setStep("compose");
               }}
               onAddMore={() =>
                 triggerFilePicker("image/*,video/*", "media", true)
               }
             />
-          )}
+          )} */}
+
+          {step === "media_editor" && (
+          <MediaAttachmentEditor
+          files={tempMediaFiles.map((m) => m.file)}
+          onClose={() => setStep("compose")}
+          onUpdate={(updatedFiles) => {
+            const newMedia = updatedFiles.map((f) => ({
+              file: f,
+              previewUrl: URL.createObjectURL(f),
+            }));
+            setTempMediaFiles(newMedia);
+          }}
+          onNext={() => {
+            setMediaFiles(tempMediaFiles); 
+            setStep("compose");
+          }}
+          onAddMore={() =>
+            triggerFilePicker("image/*,video/*", "media", true)
+          }
+        />
+        )}
+
 
           {step === "document_editor" && (
             <DocumentAttachmentEditor
