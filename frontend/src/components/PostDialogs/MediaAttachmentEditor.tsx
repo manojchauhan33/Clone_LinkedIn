@@ -316,7 +316,7 @@ const MediaAttachmentEditor = ({
           </div>
         )}
 
-        {/* Footer Buttons */}
+        
         <div className="flex justify-end items-center gap-3 p-4 border-t border-gray-100 bg-white">
           <button
             onClick={onClose}

@@ -156,14 +156,26 @@ useEffect(() => {
     if (tooLarge)
       return setError(`File "${tooLarge.name}" exceeds ${MAX_SIZE_MB} MB.`);
 
+    // if (type === "media") {
+    //   const newMedia = files.map((f) => ({
+    //     file: f,
+    //     previewUrl: URL.createObjectURL(f),
+    //   }));
+    //   setTempMediaFiles(newMedia);
+    //   setStep("media_editor");
+    // } 
+    
     if (type === "media") {
       const newMedia = files.map((f) => ({
         file: f,
         previewUrl: URL.createObjectURL(f),
       }));
-      setTempMediaFiles(newMedia);
+      setTempMediaFiles((prev) => [...prev, ...newMedia]); // append new media
       setStep("media_editor");
-    } else {
+    }
+
+
+    else {
       setDocuments([files[0]]);
       setStep("document_editor");
     }

@@ -135,7 +135,6 @@ export const repostPostHandler = async (
     //   },
     // });
     return res.status(201).json({ message: "Post shared successfully" });
-
   } catch (err: any) {
     return res.status(err.statusCode || 500).json({
       message: err.message || "Something went wrong",
@@ -188,20 +187,16 @@ export const getPostRepostsHandler = async (
   res: Response
 ) => {
   const postId = Number(req.params.id);
-  if (isNaN(postId))
+  if (isNaN(postId)) {
     return res.status(400).json({ message: "Invalid post ID" });
+  }
 
   try {
-    
-    const { originalPost, reposts } = await getPostRepostsService(postId);
-    // const totalReposts = reposts.length;
-    // console.log("Total reposts:", totalReposts);
+    const reposts = await getPostRepostsService(postId);
     res.status(200).json({
       message: "Reposts fetched successfully",
-      originalPost, 
       reposts,
     });
-    
   } catch (err: any) {
     res
       .status(err.statusCode || 500)
